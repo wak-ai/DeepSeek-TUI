@@ -1668,28 +1668,48 @@ impl Engine {
                     }
                 }
 
-                let should_emit_hydration_status =
-                    !deferred_tools_hydrated_this_batch.contains(&tool_name);
-                if blocked_error.is_none()
-                    && let Some(result) = maybe_hydrate_requested_deferred_tool(
+                // Apply field-name corrections before the deferred-tool
+                // check so that corrected input satisfies required-field
+                // validation and the tool can execute on first call.
+                if blocked_error.is_none() {
+                    let corrections = apply_field_corrections(
+                        &mut tool_input,
+                        &tool_name,
+                        &tool_catalog,
+                    );
+                    if !corrections.is_empty() {
+                        crate::logging::info(format!(
+                            "Auto-corrected field names for '{}': {}",
+                            tool_name,
+                            corrections.join(", ")
+                        ));
+                        tool.input = tool_input.clone();
+                    }
+                }
+
+                let was_deferred_before =
+                    !deferred_tools_hydrated_this_batch.contains(&tool_name)
+                    && !active_tools_at_batch_start.contains(&tool_name)
+                    && tool_catalog.iter().any(|d| d.name == tool_name && d.defer_loading.unwrap_or(false));
+                if blocked_error.is_none() {
+                    if let Some(result) = maybe_hydrate_requested_deferred_tool(
                         &tool_name,
                         &tool_input,
                         &tool_catalog,
                         &active_tools_at_batch_start,
                         &mut deferred_tools_hydrated_this_batch,
-                    )
-                {
-                    if should_emit_hydration_status {
-                        let status = if requested_tool_name == tool_name {
-                            format!("Auto-loaded deferred tool '{tool_name}' after model request.")
-                        } else {
-                            format!(
-                                "Auto-loaded deferred tool '{tool_name}' after resolving '{requested_tool_name}'."
-                            )
-                        };
-                        let _ = self.tx_event.send(Event::status(status)).await;
+                    ) {
+                        if was_deferred_before {
+                            let _ = self.tx_event.send(Event::status(format!(
+                                "Deferred tool '{tool_name}' loaded — input missing required fields, retry needed."
+                            ))).await;
+                        }
+                        guard_result = Some(result);
+                    } else if was_deferred_before && deferred_tools_hydrated_this_batch.contains(&tool_name) {
+                        let _ = self.tx_event.send(Event::status(format!(
+                            "Deferred tool '{tool_name}' loaded and executing on first call."
+                        ))).await;
                     }
-                    guard_result = Some(result);
                 }
 
                 plans.push(ToolExecutionPlan {
