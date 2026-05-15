@@ -276,7 +276,20 @@ pub(super) fn parse_parallel_tool_calls(
 ) -> Result<Vec<(String, serde_json::Value)>, ToolError> {
     let tool_uses = input
         .get("tool_uses")
-        .and_then(|v| v.as_array())
+        .and_then(|v| {
+            // Direct array: the expected case.
+            if let Some(arr) = v.as_array() {
+                return Some(arr.clone());
+            }
+            // Stringified array: DeepSeek sometimes emits `"[{...}]"` as a
+            // JSON string instead of an actual array.
+            if let Some(s) = v.as_str() {
+                if let Ok(serde_json::Value::Array(arr)) = serde_json::from_str(s) {
+                    return Some(arr);
+                }
+            }
+            None
+        })
         .ok_or_else(|| ToolError::missing_field("tool_uses"))?;
     if tool_uses.is_empty() {
         return Err(ToolError::invalid_input(

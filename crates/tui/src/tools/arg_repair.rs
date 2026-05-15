@@ -121,6 +121,31 @@ fn unwrap_markdown_autolink(s: &str) -> Option<String> {
     }
 }
 
+/// Try to unwrap a stringified JSON value.
+///
+/// When a model emits `"[\"a\",\"b\"]"` (a JSON string containing a serialised
+/// array) instead of `["a","b"]` (an actual array), this function parses the
+/// inner string and returns the unwrapped value.
+///
+/// **Only call this for fields where the schema expects array or object** — for
+/// free-form string fields (like `write_file` content) this would silently
+/// corrupt legitimate JSON text.
+///
+/// Returns `None` if the value is not a string, or if the string does not parse
+/// as a JSON array or object.
+#[allow(dead_code)]
+pub fn try_unwrap_stringified_json(value: &Value) -> Option<Value> {
+    let s = value.as_str()?;
+    let trimmed = s.trim();
+    if !(trimmed.starts_with('[') || trimmed.starts_with('{')) {
+        return None;
+    }
+    match serde_json::from_str::<Value>(trimmed) {
+        Ok(v @ Value::Array(_)) | Ok(v @ Value::Object(_)) => Some(v),
+        _ => None,
+    }
+}
+
 /// Strip ASCII control characters (0x00–0x1F except \t, \n, \r) that appear
 /// inside JSON string values. We walk character-by-character tracking whether
 /// we're inside a string (between unescaped double-quotes).
@@ -378,5 +403,40 @@ mod tests {
         let original = v.clone();
         sanitize_parsed_value(&mut v);
         assert_eq!(v, original);
+    }
+
+    // --- try_unwrap_stringified_json tests ---
+
+    #[test]
+    fn unwraps_stringified_array() {
+        let v = json!(r#"["a","b","c"]"#);
+        let unwrapped = try_unwrap_stringified_json(&v).unwrap();
+        assert_eq!(unwrapped, json!(["a", "b", "c"]));
+    }
+
+    #[test]
+    fn unwraps_stringified_object() {
+        let v = json!(r#"{"key": "val"}"#);
+        let unwrapped = try_unwrap_stringified_json(&v).unwrap();
+        assert_eq!(unwrapped, json!({"key": "val"}));
+    }
+
+    #[test]
+    fn does_not_unwrap_plain_string() {
+        let v = json!("hello world");
+        assert!(try_unwrap_stringified_json(&v).is_none());
+    }
+
+    #[test]
+    fn does_not_unwrap_non_string() {
+        assert!(try_unwrap_stringified_json(&json!(42)).is_none());
+        assert!(try_unwrap_stringified_json(&json!(true)).is_none());
+        assert!(try_unwrap_stringified_json(&json!(null)).is_none());
+    }
+
+    #[test]
+    fn does_not_unwrap_string_number() {
+        let v = json!("42");
+        assert!(try_unwrap_stringified_json(&v).is_none());
     }
 }
