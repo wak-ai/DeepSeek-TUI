@@ -448,6 +448,21 @@ pub(super) fn maybe_hydrate_requested_deferred_tool(
     }
 
     hydrated_tools_this_batch.insert(tool_name.to_string());
+
+    // Check whether the model's input already satisfies the schema's
+    // required fields. If so, activate the tool and return `None` to let
+    // the normal execution path handle it — avoiding a wasted round-trip.
+    // When the model used wrong field names that we can correct
+    // (old_string→search, new_string→replace, etc.) those corrections
+    // were already applied to tool_input by the caller, so the required-
+    // field check sees the corrected names.
+    let required = schema_required_fields(&def.input_schema);
+    let received = received_field_names(tool_input);
+    let all_required_present = required.iter().all(|field| received.contains(field));
+    if all_required_present {
+        return None;
+    }
+
     Some(deferred_tool_schema_hydration_result(def, tool_input))
 }
 
@@ -603,6 +618,92 @@ fn received_field_names(input: &Value) -> Vec<String> {
         .unwrap_or_default();
     fields.sort();
     fields
+}
+
+/// Apply field-name corrections in-place on the tool input.
+///
+/// DeepSeek models trained on other tool-calling formats sometimes emit
+/// `old_string` instead of `search`, `new_string` instead of `replace`, etc.
+/// Rather than bouncing the call for a retry, rename the fields so the tool
+/// sees the canonical names. Returns the list of corrections applied (for
+/// logging/telemetry).
+pub(super) fn apply_field_corrections(tool_input: &mut Value, tool_name: &str, catalog: &[Tool]) -> Vec<String> {
+    let Some(def) = catalog.iter().find(|d| d.name == tool_name) else {
+        return Vec::new();
+    };
+    let expected = schema_fields(&def.input_schema);
+    let received = received_field_names(tool_input);
+    let rename_pairs = field_rename_pairs(&received, &expected, tool_name);
+
+    if rename_pairs.is_empty() {
+        return Vec::new();
+    }
+
+    let Some(map) = tool_input.as_object_mut() else {
+        return Vec::new();
+    };
+
+    let mut applied = Vec::new();
+    for (from, to) in &rename_pairs {
+        if let Some(value) = map.remove(from.as_str()) {
+            map.insert(to.clone(), value);
+            applied.push(format!("{from} -> {to}"));
+        }
+    }
+    applied
+}
+
+/// Return (from, to) pairs for field renames that should be applied.
+fn field_rename_pairs(
+    received: &[String],
+    expected: &[SchemaField],
+    tool_name: &str,
+) -> Vec<(String, String)> {
+    let has_expected = |name: &str| expected.iter().any(|field| field.name == name);
+    let has_received = |name: &str| received.iter().any(|field| field == name);
+    let mut pairs = Vec::new();
+
+    if !has_received("search") && has_expected("search") {
+        if has_received("old_string") {
+            pairs.push(("old_string".to_string(), "search".to_string()));
+        } else if has_received("old_str") {
+            pairs.push(("old_str".to_string(), "search".to_string()));
+        }
+    }
+    if !has_received("replace") && has_expected("replace") {
+        if has_received("new_string") {
+            pairs.push(("new_string".to_string(), "replace".to_string()));
+        } else if has_received("new_str") {
+            pairs.push(("new_str".to_string(), "replace".to_string()));
+        } else if has_received("replacement") {
+            pairs.push(("replacement".to_string(), "replace".to_string()));
+        }
+    }
+    // file_path / filePath → path (common across edit_file, write_file, read_file)
+    if !has_received("path") && has_expected("path") {
+        if has_received("file_path") {
+            pairs.push(("file_path".to_string(), "path".to_string()));
+        } else if has_received("filePath") {
+            pairs.push(("filePath".to_string(), "path".to_string()));
+        } else if has_received("file") {
+            pairs.push(("file".to_string(), "path".to_string()));
+        } else if has_received("filepath") {
+            pairs.push(("filepath".to_string(), "path".to_string()));
+        }
+    }
+    // content → replace (write_file uses "content", but model may send it for edit_file)
+    if tool_name == "edit_file" && !has_received("replace") && has_expected("replace") && has_received("content") {
+        // Only if "search" is also present — otherwise this is probably a write_file call
+        if has_received("search") || pairs.iter().any(|(_, to)| to == "search") {
+            pairs.push(("content".to_string(), "replace".to_string()));
+        }
+    }
+    // command → cmd or vice versa for shell tools
+    if !has_received("command") && has_expected("command") && has_received("cmd") {
+        pairs.push(("cmd".to_string(), "command".to_string()));
+    }
+
+    pairs
 }
 
 fn likely_field_corrections(
