@@ -14,6 +14,7 @@
 //!  5. Strip excess closers if delta is negative.
 //!  6. Fallback: empty object `{}`.
 
+use regex::Regex;
 use serde_json::{Map, Value};
 
 /// Maximum raw argument length we'll attempt to repair (1 MiB).
@@ -59,6 +60,65 @@ pub fn repair(raw: &str) -> Result<Value, ArgRepairError> {
     }
     // Fallback: empty object
     Ok(Value::Object(Map::new()))
+}
+
+/// Post-parse sanitisation of a tool input `Value`.
+///
+/// Applies semantic repairs that operate on the parsed JSON tree rather than
+/// the raw text:
+///
+///  1. **Null stripping** — remove keys whose value is `null` from objects.
+///     DeepSeek often sends `"fuzz": null` instead of omitting the field;
+///     downstream `required_str()` / `optional_*` helpers treat absence and
+///     `null` identically, so stripping is safe and prevents spurious
+///     `MissingField` errors when `as_str()` returns `None` on a `null`.
+///
+///  2. **Markdown autolink unwrapping** — DeepSeek's chat post-training
+///     distribution leaks through the tool boundary, sometimes emitting
+///     file paths as `[notes.md](http://notes.md)`. We unwrap the
+///     degenerate case where the link text equals the URL-without-protocol;
+///     real markdown links like `[click](https://example.com)` pass through.
+pub fn sanitize_parsed_value(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            map.retain(|_, v| !v.is_null());
+            for v in map.values_mut() {
+                sanitize_parsed_value(v);
+            }
+        }
+        Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                sanitize_parsed_value(v);
+            }
+        }
+        Value::String(s) => {
+            if let Some(unwrapped) = unwrap_markdown_autolink(s) {
+                *s = unwrapped;
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Unwrap degenerate markdown autolinks where link text matches URL-without-protocol.
+///
+/// `[notes.md](http://notes.md)` → `notes.md`
+/// `[src/lib.rs](https://src/lib.rs)` → `src/lib.rs`
+///
+/// Real markdown links like `[click](https://example.com)` are left untouched.
+fn unwrap_markdown_autolink(s: &str) -> Option<String> {
+    let re = Regex::new(r"^\[([^\]]+)\]\((https?://)([^)]+)\)$").ok()?;
+    let caps = re.captures(s)?;
+    let text = caps.get(1)?.as_str();
+    let url_path = caps.get(3)?.as_str();
+    // Only unwrap when link text matches the URL path (the degenerate case).
+    // Normalise spaces that some models inject (e.g. "notes. md" → "notes.md").
+    let normalised_url: String = url_path.chars().filter(|c| *c != ' ').collect();
+    if text == normalised_url || text == url_path {
+        Some(text.to_string())
+    } else {
+        None
+    }
 }
 
 /// Strip ASCII control characters (0x00–0x1F except \t, \n, \r) that appear
@@ -266,5 +326,57 @@ mod tests {
     fn repairs_brace_balance_with_trailing_comma() {
         let v = repair(r#"{"a": 1,"#).unwrap();
         assert_eq!(v, json!({"a": 1}));
+    }
+
+    // --- sanitize_parsed_value tests ---
+
+    #[test]
+    fn sanitize_strips_null_values() {
+        let mut v = json!({"path": "/foo", "fuzz": null, "search": "x"});
+        sanitize_parsed_value(&mut v);
+        assert_eq!(v, json!({"path": "/foo", "search": "x"}));
+    }
+
+    #[test]
+    fn sanitize_strips_nested_null_values() {
+        let mut v = json!({"outer": {"inner": null, "keep": 1}});
+        sanitize_parsed_value(&mut v);
+        assert_eq!(v, json!({"outer": {"keep": 1}}));
+    }
+
+    #[test]
+    fn sanitize_unwraps_markdown_autolink() {
+        let mut v = json!({"path": "[notes.md](http://notes.md)"});
+        sanitize_parsed_value(&mut v);
+        assert_eq!(v, json!({"path": "notes.md"}));
+    }
+
+    #[test]
+    fn sanitize_unwraps_https_autolink() {
+        let mut v = json!({"path": "[src/lib.rs](https://src/lib.rs)"});
+        sanitize_parsed_value(&mut v);
+        assert_eq!(v, json!({"path": "src/lib.rs"}));
+    }
+
+    #[test]
+    fn sanitize_preserves_real_markdown_links() {
+        let mut v = json!({"url": "[click here](https://example.com)"});
+        sanitize_parsed_value(&mut v);
+        assert_eq!(v, json!({"url": "[click here](https://example.com)"}));
+    }
+
+    #[test]
+    fn sanitize_handles_spaced_url() {
+        let mut v = json!({"path": "[notes.md](http://notes. md)"});
+        sanitize_parsed_value(&mut v);
+        assert_eq!(v, json!({"path": "notes.md"}));
+    }
+
+    #[test]
+    fn sanitize_no_op_on_clean_input() {
+        let mut v = json!({"path": "/foo", "search": "x", "replace": "y"});
+        let original = v.clone();
+        sanitize_parsed_value(&mut v);
+        assert_eq!(v, original);
     }
 }
