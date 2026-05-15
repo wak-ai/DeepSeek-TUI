@@ -10,9 +10,10 @@ fn main() {
     configure_windows_stack();
 
     let package_version = env!("CARGO_PKG_VERSION");
+    let fork_version = format!("{package_version}-wk");
     let build_version = build_sha()
-        .map(|sha| format!("{package_version} ({sha})"))
-        .unwrap_or_else(|| package_version.to_string());
+        .map(|sha| format!("{fork_version} ({sha})"))
+        .unwrap_or_else(|| fork_version);
 
     println!("cargo:rustc-env=DEEPSEEK_BUILD_VERSION={build_version}");
 }
