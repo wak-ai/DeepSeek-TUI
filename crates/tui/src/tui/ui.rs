@@ -5517,17 +5517,20 @@ fn render(f: &mut Frame, app: &mut App) {
     }
 
     // Render composer
-    let cursor_pos = {
+    let (cursor_pos, composer_menu_rows) = {
         let composer_widget = ComposerWidget::new(
             app,
             composer_max_height,
             &slash_menu_entries,
             &mention_menu_entries,
         );
+        let menu_rows = composer_widget.active_menu_reserved_rows();
         let buf = f.buffer_mut();
         composer_widget.render(chunks[3], buf);
-        composer_widget.cursor_pos(chunks[3])
+        (composer_widget.cursor_pos(chunks[3]), menu_rows)
     };
+    app.viewport.last_composer_area = Some(chunks[3]);
+    app.viewport.last_composer_menu_rows = composer_menu_rows;
     if let Some(cursor_pos) = cursor_pos {
         f.set_cursor_position(cursor_pos);
     }

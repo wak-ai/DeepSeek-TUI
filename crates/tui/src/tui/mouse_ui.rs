@@ -15,6 +15,7 @@ use crate::tui::ui_text::{
     history_cell_to_text, line_to_plain, slice_text, text_display_width, truncate_line_to_width,
 };
 use crate::tui::views::{ContextMenuAction, HelpView, ModalKind, ViewEvent};
+use crate::tui::widgets::composer_char_index_at_click;
 
 // These functions will need to be imported from ui.rs or we can just import crate::tui::ui::*.
 use crate::tui::ui::{
@@ -89,6 +90,12 @@ pub(crate) fn handle_mouse_event(app: &mut App, mouse: MouseEvent) -> Vec<ViewEv
 
             if mouse_hits_rect(mouse, app.viewport.jump_to_latest_button_area) {
                 app.scroll_to_bottom();
+                return Vec::new();
+            }
+
+            if let Some(idx) = try_composer_click(app, mouse) {
+                app.cursor_position = idx;
+                app.needs_redraw = true;
                 return Vec::new();
             }
 
@@ -637,4 +644,23 @@ pub(crate) fn selection_to_text(app: &App) -> Option<String> {
         selected_lines.push(slice);
     }
     Some(selected_lines.join("\n"))
+}
+
+fn try_composer_click(app: &App, mouse: MouseEvent) -> Option<usize> {
+    let area = app.viewport.last_composer_area?;
+    if !mouse_hits_rect(mouse, Some(area)) {
+        return None;
+    }
+    if app.is_history_search_active() {
+        return None;
+    }
+    composer_char_index_at_click(
+        app.composer_display_input(),
+        app.composer_display_cursor(),
+        area,
+        app.composer_border,
+        app.viewport.last_composer_menu_rows,
+        mouse.column,
+        mouse.row,
+    )
 }

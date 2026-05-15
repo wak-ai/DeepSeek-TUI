@@ -472,7 +472,7 @@ impl<'a> ComposerWidget<'a> {
     /// backend's per-cell write cost makes the layout jitter visible
     /// even though the work is tiny on Unix terminals. See user
     /// feedback in v0.8.8 polish thread.
-    fn active_menu_reserved_rows(&self) -> usize {
+    pub(crate) fn active_menu_reserved_rows(&self) -> usize {
         let actual = self.active_menu_row_count();
         if actual == 0 {
             return 0;
@@ -2206,6 +2206,139 @@ fn cursor_row_col(input: &str, cursor: usize, width: usize) -> (usize, usize) {
     (row, col)
 }
 
+fn char_index_at_row_col(input: &str, target_row: usize, target_col: usize, width: usize) -> usize {
+    let width = width.max(1);
+    let mut row = 0usize;
+    let mut col = 0usize;
+    let mut char_idx = 0usize;
+    let mut result = 0usize;
+    let mut on_target = target_row == 0;
+
+    for grapheme in input.graphemes(true) {
+        let gc = grapheme.chars().count();
+
+        if grapheme == "\n" {
+            if on_target {
+                return char_idx;
+            }
+            row += 1;
+            col = 0;
+            char_idx += gc;
+            on_target = row == target_row;
+            if row > target_row {
+                return result;
+            }
+            if on_target {
+                result = char_idx;
+            }
+            continue;
+        }
+
+        let gw = grapheme.width();
+
+        if col + gw > width && col != 0 {
+            if on_target {
+                return result;
+            }
+            row += 1;
+            col = 0;
+            on_target = row == target_row;
+            if row > target_row {
+                return result;
+            }
+            if on_target {
+                result = char_idx;
+            }
+        }
+
+        if on_target {
+            if col > target_col {
+                return result;
+            }
+            result = char_idx;
+            if target_col < col + gw {
+                return char_idx;
+            }
+        }
+
+        col += gw;
+        char_idx += gc;
+
+        if col >= width {
+            if on_target {
+                result = char_idx;
+            }
+            row += 1;
+            col = 0;
+            on_target = row == target_row;
+        }
+    }
+
+    if on_target || row < target_row {
+        char_idx
+    } else {
+        result
+    }
+}
+
+pub(crate) fn composer_char_index_at_click(
+    input: &str,
+    cursor: usize,
+    area: Rect,
+    has_border: bool,
+    menu_reserved_rows: usize,
+    click_col: u16,
+    click_row: u16,
+) -> Option<usize> {
+    let inner_area = if has_border && area.height >= 3 && area.width >= 12 {
+        Block::default().borders(Borders::ALL).inner(area)
+    } else {
+        area
+    };
+
+    if click_col < inner_area.x
+        || click_col >= inner_area.x.saturating_add(inner_area.width)
+        || click_row < inner_area.y
+        || click_row >= inner_area.y.saturating_add(inner_area.height)
+    {
+        return None;
+    }
+
+    if input.is_empty() {
+        return Some(0);
+    }
+
+    let rel_col = usize::from(click_col.saturating_sub(inner_area.x));
+    let rel_row = usize::from(click_row.saturating_sub(inner_area.y));
+    let content_width = usize::from(inner_area.width.max(1));
+
+    let input_rows_budget = composer_input_rows_budget(inner_area.height, menu_reserved_rows);
+    let lines = wrap_input_lines(input, content_width);
+    let (cursor_row, _) = cursor_row_col(input, cursor, content_width);
+
+    let max_h = input_rows_budget.max(1);
+    let mut start = 0usize;
+    if cursor_row >= max_h {
+        start = cursor_row + 1 - max_h;
+    }
+    let total_lines = lines.len().max(1);
+    if start + max_h > total_lines {
+        start = total_lines.saturating_sub(max_h);
+    }
+
+    let visible_count = total_lines.saturating_sub(start).min(max_h);
+    let top_padding = composer_top_padding(visible_count, input_rows_budget);
+
+    if rel_row < top_padding {
+        return Some(0);
+    }
+
+    let text_row = rel_row.saturating_sub(top_padding);
+    let absolute_row = start.saturating_add(text_row);
+
+    Some(char_index_at_row_col(input, absolute_row, rel_col, content_width))
+}
+
 fn wrap_input_lines(input: &str, width: usize) -> Vec<String> {
     let mut lines = Vec::new();
     if input.is_empty() {
@@ -2272,10 +2405,11 @@ fn wrap_text(text: &str, width: usize) -> Vec<String> {
 mod tests {
     use super::{
         ApprovalWidget, COMPOSER_PANEL_HEIGHT, ChatWidget, ComposerWidget, Renderable,
-        SlashMenuEntry, apply_selection_to_line, build_empty_state_lines, composer_height,
-        composer_max_height, composer_min_input_rows, composer_top_padding, compute_takeover_area,
-        cursor_row_col, layout_input, pad_lines_to_bottom, placeholder_visual_lines,
-        should_render_empty_state, slash_completion_hints, wrap_input_lines, wrap_text,
+        SlashMenuEntry, apply_selection_to_line, build_empty_state_lines, char_index_at_row_col,
+        composer_height, composer_max_height, composer_min_input_rows, composer_top_padding,
+        compute_takeover_area, cursor_row_col, layout_input, pad_lines_to_bottom,
+        placeholder_visual_lines, should_render_empty_state, slash_completion_hints,
+        wrap_input_lines, wrap_text,
     };
     use crate::config::{ApiProvider, Config};
     use crate::localization::Locale;
@@ -3491,6 +3625,68 @@ mod tests {
                  per_render={per_call_us:>6} \u{3bc}s  ({:>3} ms / {iters} iters)",
                 elapsed.as_millis()
             );
+        }
+    }
+
+    // === char_index_at_row_col tests ===
+
+    #[test]
+    fn char_index_single_line_click() {
+        assert_eq!(char_index_at_row_col("hello", 0, 0, 80), 0);
+        assert_eq!(char_index_at_row_col("hello", 0, 2, 80), 2);
+        assert_eq!(char_index_at_row_col("hello", 0, 4, 80), 4);
+        assert_eq!(char_index_at_row_col("hello", 0, 5, 80), 5);
+        assert_eq!(char_index_at_row_col("hello", 0, 99, 80), 5);
+    }
+
+    #[test]
+    fn char_index_multiline_newlines() {
+        let input = "abc\ndef\nghi";
+        assert_eq!(char_index_at_row_col(input, 0, 0, 80), 0);
+        assert_eq!(char_index_at_row_col(input, 0, 2, 80), 2);
+        assert_eq!(char_index_at_row_col(input, 1, 0, 80), 4);
+        assert_eq!(char_index_at_row_col(input, 1, 1, 80), 5);
+        assert_eq!(char_index_at_row_col(input, 2, 0, 80), 8);
+        assert_eq!(char_index_at_row_col(input, 2, 2, 80), 10);
+    }
+
+    #[test]
+    fn char_index_soft_wrap() {
+        // "hello world" with width 5 wraps to: "hello", " worl", "d"
+        let input = "hello world";
+        assert_eq!(char_index_at_row_col(input, 0, 0, 5), 0);
+        assert_eq!(char_index_at_row_col(input, 0, 4, 5), 4);
+        assert_eq!(char_index_at_row_col(input, 1, 0, 5), 5);
+        assert_eq!(char_index_at_row_col(input, 1, 1, 5), 6);
+        assert_eq!(char_index_at_row_col(input, 2, 0, 5), 10);
+    }
+
+    #[test]
+    fn char_index_past_end_of_line() {
+        let input = "ab\ncd";
+        assert_eq!(char_index_at_row_col(input, 0, 10, 80), 2);
+    }
+
+    #[test]
+    fn char_index_past_last_row() {
+        let input = "hello";
+        assert_eq!(char_index_at_row_col(input, 5, 0, 80), 5);
+    }
+
+    #[test]
+    fn char_index_empty_input() {
+        assert_eq!(char_index_at_row_col("", 0, 0, 80), 0);
+        assert_eq!(char_index_at_row_col("", 0, 5, 80), 0);
+    }
+
+    #[test]
+    fn char_index_roundtrip_with_cursor_row_col() {
+        let input = "hello\nworld test";
+        let width = 8;
+        for i in 0..=input.chars().count() {
+            let (row, col) = cursor_row_col(input, i, width);
+            let back = char_index_at_row_col(input, row, col, width);
+            assert_eq!(back, i, "roundtrip failed for cursor={i} -> ({row},{col}) -> {back}");
         }
     }
 }
