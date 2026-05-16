@@ -3317,12 +3317,28 @@ async fn run_event_loop(
                     app.needs_redraw = true;
                 }
                 KeyCode::Up => {
-                    let _ =
-                        handle_composer_history_arrow(app, key, slash_menu_open, mention_menu_open);
+                    if !slash_menu_open && !mention_menu_open && app.input.contains('\n') {
+                        app.move_cursor_up();
+                    } else {
+                        let _ = handle_composer_history_arrow(
+                            app,
+                            key,
+                            slash_menu_open,
+                            mention_menu_open,
+                        );
+                    }
                 }
                 KeyCode::Down => {
-                    let _ =
-                        handle_composer_history_arrow(app, key, slash_menu_open, mention_menu_open);
+                    if !slash_menu_open && !mention_menu_open && app.input.contains('\n') {
+                        app.move_cursor_down();
+                    } else {
+                        let _ = handle_composer_history_arrow(
+                            app,
+                            key,
+                            slash_menu_open,
+                            mention_menu_open,
+                        );
+                    }
                 }
                 KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.clear_input_recoverable();

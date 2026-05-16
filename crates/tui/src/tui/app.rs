@@ -3285,6 +3285,47 @@ impl App {
         self.needs_redraw = true;
     }
 
+    pub fn move_cursor_up(&mut self) {
+        let text = self.input.clone();
+        let cursor_byte = byte_index_at_char(&text, self.cursor_position);
+        if let Some(prev_nl) = text[..cursor_byte].rfind('\n') {
+            let line_start_byte = prev_nl + 1;
+            let col = char_count(&text[line_start_byte..cursor_byte]);
+            let prev_start = text[..prev_nl].rfind('\n').map_or(0, |i| i + 1);
+            let prev_line_len = char_count(&text[prev_start..prev_nl]);
+            let target_col = col.min(prev_line_len);
+            self.cursor_position = char_count(&text[..prev_start]) + target_col;
+            self.needs_redraw = true;
+        } else {
+            self.history_up();
+        }
+    }
+
+    pub fn move_cursor_down(&mut self) {
+        let text = self.input.clone();
+        let total = char_count(&text);
+        if self.cursor_position >= total {
+            self.history_down();
+            return;
+        }
+        let cursor_byte = byte_index_at_char(&text, self.cursor_position);
+        let rest = &text[cursor_byte..];
+        if let Some(rel_nl) = rest.find('\n') {
+            let line_start_byte = text[..cursor_byte].rfind('\n').map_or(0, |i| i + 1);
+            let col = char_count(&text[line_start_byte..cursor_byte]);
+            let next_line_start = cursor_byte + rel_nl + 1;
+            let next_line = &text[next_line_start..];
+            let next_line_len = next_line.find('\n').unwrap_or(next_line.len());
+            let next_line_char_len =
+                char_count(&text[next_line_start..next_line_start + next_line_len]);
+            let target_col = col.min(next_line_char_len);
+            self.cursor_position = char_count(&text[..next_line_start]) + target_col;
+            self.needs_redraw = true;
+        } else {
+            self.history_down();
+        }
+    }
+
     // === Vim composer mode helpers ===
 
     /// Move the cursor to the start of the current logical line (vim `0`).
