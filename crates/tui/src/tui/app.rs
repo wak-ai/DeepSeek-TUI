@@ -2926,6 +2926,25 @@ impl App {
         true
     }
 
+    fn skip_attachment_marker(&mut self, direction: isize) {
+        let references = crate::tui::file_mention::media_attachment_references(&self.input);
+        let cursor_byte = byte_index_at_char(&self.input, self.cursor_position);
+        for r in &references {
+            if cursor_byte > r.start_byte && cursor_byte < r.end_byte {
+                let target_byte = if direction > 0 {
+                    r.end_byte
+                } else {
+                    r.start_byte
+                };
+                self.cursor_position = self.input
+                    [..target_byte.min(self.input.len())]
+                    .chars()
+                    .count();
+                return;
+            }
+        }
+    }
+
     pub fn flush_paste_burst_if_due(&mut self, now: Instant) -> bool {
         match self.paste_burst.flush_if_due(now) {
             FlushResult::Paste(text) => {
@@ -3318,6 +3337,7 @@ impl App {
     pub fn move_cursor_left(&mut self) {
         self.composer.selection.clear();
         self.cursor_position = self.cursor_position.saturating_sub(1);
+        self.skip_attachment_marker(-1);
         self.needs_redraw = true;
     }
 
@@ -3325,6 +3345,7 @@ impl App {
         self.composer.selection.clear();
         if self.cursor_position < char_count(&self.input) {
             self.cursor_position += 1;
+            self.skip_attachment_marker(1);
             self.needs_redraw = true;
         }
     }
