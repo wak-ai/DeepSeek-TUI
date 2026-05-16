@@ -2786,11 +2786,11 @@ impl App {
         let needs_prefix_newline = self.input[..byte_index]
             .chars()
             .last()
-            .is_some_and(|ch| !ch.is_whitespace());
+            .is_some_and(|ch| ch != '\n');
         let needs_suffix_newline = self.input[byte_index..]
             .chars()
             .next()
-            .is_some_and(|ch| !ch.is_whitespace());
+            .is_some_and(|ch| ch != '\n');
 
         let mut inserted = String::new();
         if needs_prefix_newline {
@@ -5487,7 +5487,7 @@ mod tests {
             app.input
                 .contains("before\n[Attached image: 8x4 PNG (2KB) at /tmp/pasted.png]")
         );
-        assert!(app.input.contains("] after"));
+        assert!(app.input.contains("]\n after") || app.input.contains("]\nafter"));
         let status = app.status_message.as_deref().expect("status message");
         assert_eq!(status, "Attached image: 8x4 PNG (2KB)");
     }
