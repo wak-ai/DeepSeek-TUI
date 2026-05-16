@@ -4709,18 +4709,25 @@ async fn run_event_loop(
                     app.delete_word_forward();
                 }
                 KeyCode::Delete if key.modifiers.contains(KeyModifiers::CONTROL) => {}
-                KeyCode::Backspace if !app.remove_selected_composer_attachment() => {
+                KeyCode::Backspace
+                    if !app.remove_selected_composer_attachment()
+                        && !app.remove_attachment_at_cursor() =>
+                {
                     app.delete_char();
                 }
                 KeyCode::Backspace => {}
                 KeyCode::Char('h')
                     if key_shortcuts::is_ctrl_h_backspace(&key)
-                        && !app.remove_selected_composer_attachment() =>
+                        && !app.remove_selected_composer_attachment()
+                        && !app.remove_attachment_at_cursor() =>
                 {
                     app.delete_char();
                 }
                 KeyCode::Char('h') if key_shortcuts::is_ctrl_h_backspace(&key) => {}
-                KeyCode::Delete if !app.remove_selected_composer_attachment() => {
+                KeyCode::Delete
+                    if !app.remove_selected_composer_attachment()
+                        && !app.remove_attachment_at_cursor() =>
+                {
                     app.delete_char_forward();
                 }
                 KeyCode::Delete => {}

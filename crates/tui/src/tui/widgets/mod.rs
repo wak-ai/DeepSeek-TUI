@@ -52,6 +52,32 @@ use ratatui::{
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
+fn strip_attachment_markers(input: &str, cursor_char: usize) -> (String, usize) {
+    let mut out = String::with_capacity(input.len());
+    let mut removed_before_cursor = 0usize;
+    let mut pos = 0usize;
+    for line in input.split_inclusive('\n') {
+        let line_chars: usize = line.chars().count();
+        let is_marker =
+            line.trim().starts_with("[Attached ") && line.trim().ends_with(']');
+        if is_marker {
+            let line_end = pos + line_chars;
+            if cursor_char > line_end {
+                removed_before_cursor += line_chars;
+            } else if cursor_char >= pos {
+                removed_before_cursor += cursor_char - pos;
+            }
+        } else {
+            out.push_str(line);
+        }
+        pos += line_chars;
+    }
+    let new_cursor = cursor_char
+        .saturating_sub(removed_before_cursor)
+        .min(out.chars().count());
+    (out, new_cursor)
+}
+
 const SEND_FLASH_DURATION: Duration = Duration::from_millis(500);
 const COMPOSER_PANEL_HEIGHT: u16 = 2;
 const JUMP_TO_LATEST_BUTTON_WIDTH: u16 = 3;
@@ -634,8 +660,12 @@ impl Renderable for ComposerWidget<'_> {
         let background = Style::default().bg(self.app.ui_theme.composer_bg);
         let has_panel = self.has_panel(area);
         let inner_area = self.inner_area(area);
-        let input_text = self.app.composer_display_input();
-        let input_cursor = self.app.composer_display_cursor();
+        let raw_input = self.app.composer_display_input();
+        let raw_cursor = self.app.composer_display_cursor();
+        let (stripped, stripped_cursor) =
+            strip_attachment_markers(raw_input, raw_cursor);
+        let input_text: &str = &stripped;
+        let input_cursor = stripped_cursor;
         let history_search_matches = if self.app.is_history_search_active() {
             self.app.history_search_matches()
         } else {
@@ -1108,8 +1138,10 @@ impl Renderable for ComposerWidget<'_> {
     }
 
     fn desired_height(&self, width: u16) -> u16 {
+        let (stripped, _) =
+            strip_attachment_markers(self.app.composer_display_input(), 0);
         composer_height(
-            self.app.composer_display_input(),
+            &stripped,
             width,
             self.max_height.min(self.max_height_cap()),
             self.active_menu_reserved_rows(),
@@ -1120,8 +1152,12 @@ impl Renderable for ComposerWidget<'_> {
 
     fn cursor_pos(&self, area: Rect) -> Option<(u16, u16)> {
         let inner_area = self.inner_area(area);
-        let input_text = self.app.composer_display_input();
-        let input_cursor = self.app.composer_display_cursor();
+        let (stripped, stripped_cursor) = strip_attachment_markers(
+            self.app.composer_display_input(),
+            self.app.composer_display_cursor(),
+        );
+        let input_text: &str = &stripped;
+        let input_cursor = stripped_cursor;
         let content_width = usize::from(inner_area.width.max(1));
         // Match the render path's locked-budget calculation so the cursor
         // lands on the same row the input is drawn on.
