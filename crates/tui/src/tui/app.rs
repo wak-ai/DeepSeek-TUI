@@ -2800,7 +2800,9 @@ impl App {
         if needs_suffix_newline || self.input[byte_index..].is_empty() {
             inserted.push('\n');
         }
+        let restore_cursor = cursor;
         self.insert_str(&inserted);
+        self.cursor_position = restore_cursor;
         self.paste_burst.clear_after_explicit_paste();
     }
 
