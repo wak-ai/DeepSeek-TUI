@@ -1971,7 +1971,7 @@ fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
 
     let body = vec![
         Line::from(Span::styled(
-            format!("{inset}>_ DeepSeek TUI (v{})", env!("CARGO_PKG_VERSION")),
+            format!("{inset}>_ DeepSeek TUI (v{})", env!("DEEPSEEK_BUILD_VERSION")),
             Style::default().fg(palette::DEEPSEEK_BLUE).bold(),
         )),
         Line::from(""),
@@ -3076,7 +3076,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains(&format!(">_ DeepSeek TUI (v{})", env!("CARGO_PKG_VERSION"))));
+        assert!(rendered.contains(&format!(">_ DeepSeek TUI (v{})", env!("DEEPSEEK_BUILD_VERSION"))));
         assert!(rendered.contains("model: deepseek-v4-pro  /model to switch"));
         assert!(rendered.contains("directory: /tmp/deepseek-test-workspace"));
     }
