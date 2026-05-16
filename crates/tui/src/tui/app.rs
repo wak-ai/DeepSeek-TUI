@@ -4274,13 +4274,39 @@ impl App {
     pub fn apply_clipboard_content(&mut self, content: ClipboardContent) {
         match content {
             ClipboardContent::Text(text) => {
-                self.insert_paste_text(&text);
+                if let Some(path) = Self::detect_image_path(&text) {
+                    let filename = path
+                        .file_name()
+                        .and_then(|f| f.to_str())
+                        .unwrap_or("image");
+                    self.insert_media_attachment("image", &path, Some(filename));
+                    self.status_message = Some(format!("Attached image: {filename}"));
+                } else {
+                    self.insert_paste_text(&text);
+                }
             }
             ClipboardContent::Image(pasted) => {
                 let description = format!("{} ({})", pasted.short_label(), pasted.size_label());
                 self.insert_media_attachment("image", &pasted.path, Some(&description));
                 self.status_message = Some(format!("Attached image: {description}"));
             }
+        }
+    }
+
+    fn detect_image_path(text: &str) -> Option<std::path::PathBuf> {
+        let trimmed = text.trim().replace("\\ ", " ");
+        if trimmed.contains('\n') || trimmed.is_empty() {
+            return None;
+        }
+        let path = std::path::Path::new(&trimmed);
+        let ext = path.extension()?.to_str()?.to_lowercase();
+        if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp") {
+            return None;
+        }
+        if path.exists() {
+            Some(path.to_path_buf())
+        } else {
+            None
         }
     }
 
