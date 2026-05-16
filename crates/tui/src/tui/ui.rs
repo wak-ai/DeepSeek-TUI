@@ -1235,6 +1235,8 @@ fn build_app_system_prompt(app: &App, config: &Config) -> SystemPrompt {
             show_thinking: app.show_thinking,
             verbosity: app.verbosity.as_deref(),
             skills_scan_codewhale_only: app.skills_scan_codewhale_only,
+            vision_enabled: config.features().enabled(crate::features::Feature::VisionModel)
+                && config.vision_model_config().is_some(),
         },
     )
 }

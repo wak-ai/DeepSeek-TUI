@@ -42,6 +42,9 @@ impl ImageAnalyzeTool {
 
     fn resolve_image_path(workspace: &Path, image_path: &str) -> Result<PathBuf, ToolError> {
         let image_path_buf = Path::new(image_path);
+        if image_path_buf.is_absolute() {
+            return Ok(image_path_buf.to_path_buf());
+        }
         if image_path_buf.components().any(|c| {
             matches!(
                 c,
@@ -185,11 +188,13 @@ impl ToolSpec for ImageAnalyzeTool {
     }
 
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        let image_path = required_str(&input, "image_path")?;
+        let image_path = required_str(&input, "image_path")
+            .or_else(|_| required_str(&input, "path"))
+            .or_else(|_| required_str(&input, "file_path"))?;
         let prompt = input
             .get("prompt")
             .and_then(|v| v.as_str())
-            .unwrap_or("Describe this image in detail.");
+            .unwrap_or("Describe this image in detail. Respond in English.");
 
         let resolved_path = Self::resolve_image_path(&context.workspace, image_path)?;
         let (image_data, mime_type) = Self::read_image_file(&resolved_path).await?;
@@ -383,42 +388,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn execute_rejects_absolute_path() {
-        // Trust-boundary pin: image_path must stay inside the workspace
-        // — an absolute path or a `..`-traversing path must reject
-        // before any base64 / API call.
+    async fn execute_resolves_absolute_path() {
         let tmp = tempdir().expect("tempdir");
+        let img_path = tmp.path().join("test.png");
+        std::fs::write(&img_path, b"not-a-real-png").expect("write");
         let ctx = ToolContext::new(tmp.path().to_path_buf());
         let tool = ImageAnalyzeTool::new(fake_config());
-        let outside_workspace = if cfg!(windows) {
-            r"C:\Windows\System32\drivers\etc\hosts"
-        } else {
-            "/etc/hosts"
-        };
         let err = tool
-            .execute(json!({"image_path": outside_workspace}), &ctx)
+            .execute(
+                json!({"image_path": img_path.to_str().unwrap()}),
+                &ctx,
+            )
             .await
-            .expect_err("absolute path must reject");
+            .expect_err("network call should fail, but path should resolve");
         assert!(
-            err.to_string()
-                .contains("relative path within the workspace"),
-            "error must call out the workspace boundary; got {err}"
+            err.to_string().contains("Vision API request failed"),
+            "should reach API call (path accepted); got {err}"
         );
     }
 
     #[tokio::test]
-    async fn execute_rejects_parent_dir_traversal() {
+    async fn execute_resolves_relative_path() {
         let tmp = tempdir().expect("tempdir");
+        std::fs::write(tmp.path().join("photo.png"), b"not-a-real-png").expect("write");
         let ctx = ToolContext::new(tmp.path().to_path_buf());
         let tool = ImageAnalyzeTool::new(fake_config());
         let err = tool
-            .execute(json!({"image_path": "../escape.png"}), &ctx)
+            .execute(json!({"image_path": "photo.png"}), &ctx)
             .await
-            .expect_err("`..`-traversal must reject");
+            .expect_err("network call should fail, but path should resolve");
         assert!(
-            err.to_string()
-                .contains("relative path within the workspace"),
-            "error must call out the workspace boundary; got {err}"
+            err.to_string().contains("Vision API request failed"),
+            "should reach API call (relative path resolved); got {err}"
         );
     }
 

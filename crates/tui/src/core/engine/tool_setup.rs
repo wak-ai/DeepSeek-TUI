@@ -130,7 +130,17 @@ impl Engine {
         if self.config.features.enabled(Feature::VisionModel)
             && let Some(ref vision_config) = self.config.vision_config
         {
+            tracing::info!(
+                model = %vision_config.model,
+                "registering image_analyze tool (vision feature enabled)"
+            );
             builder = builder.with_vision_tools(vision_config.clone());
+        } else {
+            tracing::debug!(
+                feature_enabled = self.config.features.enabled(Feature::VisionModel),
+                config_present = self.config.vision_config.is_some(),
+                "image_analyze tool not registered"
+            );
         }
 
         // Register the `notify` tool unconditionally (#1322). It has no

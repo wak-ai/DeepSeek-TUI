@@ -872,6 +872,8 @@ impl Engine {
                     show_thinking: config.show_thinking,
                     verbosity: config.verbosity.as_deref(),
                     skills_scan_codewhale_only: config.skills_scan_codewhale_only,
+                    vision_enabled: config.features.enabled(Feature::VisionModel)
+                        && config.vision_config.is_some(),
                 },
             );
         let stable_prompt = Some(system_prompt);
@@ -3218,6 +3220,8 @@ impl Engine {
                 show_thinking: self.config.show_thinking,
                 verbosity: self.config.verbosity.as_deref(),
                 skills_scan_codewhale_only: self.config.skills_scan_codewhale_only,
+                vision_enabled: self.config.features.enabled(Feature::VisionModel)
+                    && self.config.vision_config.is_some(),
             },
         );
         let mut stable_prompt =

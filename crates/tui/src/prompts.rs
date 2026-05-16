@@ -47,6 +47,9 @@ pub struct PromptSessionContext<'a> {
     /// Restrict skill discovery to CodeWhale-owned roots plus explicit
     /// `skills_dir` configuration.
     pub skills_scan_codewhale_only: bool,
+    /// When true, the system prompt includes guidance about the
+    /// `image_analyze` tool for vision / image analysis.
+    pub vision_enabled: bool,
 }
 
 impl Default for PromptSessionContext<'_> {
@@ -62,6 +65,7 @@ impl Default for PromptSessionContext<'_> {
             show_thinking: true,
             verbosity: None,
             skills_scan_codewhale_only: false,
+            vision_enabled: false,
         }
     }
 }
@@ -1016,6 +1020,7 @@ pub fn system_prompt_for_mode_with_context_and_skills(
             show_thinking: true,
             verbosity: None,
             skills_scan_codewhale_only: false,
+            vision_enabled: false,
         },
     )
 }
@@ -1111,6 +1116,19 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
         full_prompt = format!(
             "{full_prompt}\n\n{}",
             concise_output_discipline_instruction()
+        );
+    }
+
+    // 2.3b. Vision / image analysis guidance — tells the model to
+    // use `image_analyze` for image files instead of `read_file`.
+    if session_context.vision_enabled {
+        full_prompt.push_str(
+            "\n\n## Vision / Image Analysis\n\n\
+             You have the `image_analyze` tool available for analyzing images. \
+             When the user references an image file (PNG, JPEG, GIF, WebP, or BMP), \
+             use `image_analyze` with the file path — do NOT use `read_file` for \
+             binary image files. The `image_analyze` tool accepts both absolute and \
+             relative paths."
         );
     }
 
@@ -1909,6 +1927,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1981,6 +2000,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2026,6 +2046,7 @@ mod tests {
                 show_thinking: false,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2081,6 +2102,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2187,6 +2209,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2226,6 +2249,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2257,6 +2281,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2317,6 +2342,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2348,6 +2374,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2683,6 +2710,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -2720,6 +2748,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: None,
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
