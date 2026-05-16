@@ -75,6 +75,7 @@ use crate::tools::goal::{GoalSnapshot, GoalStatus};
 use crate::tools::shell::{ShellJobSnapshot, ShellStatus};
 use crate::tools::spec::{RuntimeToolServices, ToolResult};
 use crate::tools::subagent::SubAgentStatus;
+use crate::tui::clipboard::ClipboardContent;
 use crate::tui::auto_router;
 use crate::tui::color_compat::ColorCompatBackend;
 use crate::tui::command_palette::{
@@ -3288,8 +3289,9 @@ async fn run_event_loop(
                 } else if !app.view_stack.is_empty() {
                     // A non-consumed modal is open — don't leak paste into composer
                 } else {
-                    // Paste into main input
-                    app.insert_paste_text(text);
+                    // Paste into main input (route through apply_clipboard_content
+                    // so image-path detection runs on bracketed paste too)
+                    app.apply_clipboard_content(ClipboardContent::Text(text.clone()));
                 }
                 continue;
             }
