@@ -478,16 +478,21 @@ pub fn context_references_from_input(
         references.push(reference);
     }
 
-    for reference in extract_media_attachment_references(input) {
+    for (i, reference) in extract_media_attachment_references(input).into_iter().enumerate() {
+        let filename = std::path::Path::new(&reference.path)
+            .file_name()
+            .and_then(|f| f.to_str())
+            .unwrap_or(&reference.path)
+            .to_string();
         let context_reference = ContextReference {
             kind: ContextReferenceKind::MediaAttachment,
             source: ContextReferenceSource::Attachment,
-            badge: reference.kind,
-            label: reference.path.clone(),
+            badge: format!("Image #{}", i + 1),
+            label: filename,
             target: reference.path,
             included: true,
             expanded: false,
-            detail: Some("attached media".to_string()),
+            detail: None,
         };
         if !seen.insert(format!(
             "{:?}:{:?}:{}:{}",
@@ -1035,7 +1040,7 @@ mod tests {
         assert!(
             previews
                 .iter()
-                .any(|item| item.kind == "image" && item.included),
+                .any(|item| item.kind.starts_with("Image #") && item.included),
             "/attach media should be included: {previews:?}"
         );
     }
