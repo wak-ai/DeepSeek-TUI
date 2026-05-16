@@ -224,6 +224,8 @@ impl ToolSpec for ImageAnalyzeTool {
                         .post(&url)
                         .header("Content-Type", "application/json")
                         .header("Authorization", format!("Bearer {api_key}"))
+                        .header("X-Title", "deepseek-tui-wk")
+                        .header("HTTP-Referer", "https://github.com/wak-ai/DeepSeek-TUI")
                         .json(&payload)
                         .send()
                         .await
