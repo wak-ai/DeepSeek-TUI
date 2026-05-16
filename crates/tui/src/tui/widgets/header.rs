@@ -411,7 +411,7 @@ impl<'a> HeaderWidget<'a> {
     /// Compile-time version tag (`v0.8.29`, …). Rendered in the header's
     /// right cluster as the lowest-priority element — see `right_spans`.
     fn version_label() -> String {
-        format!("v{}", env!("CARGO_PKG_VERSION"))
+        format!("v{}", env!("DEEPSEEK_BUILD_VERSION"))
     }
 
     fn version_spans(prefix_existing: bool) -> Vec<Span<'static>> {
@@ -648,7 +648,7 @@ mod tests {
             ),
             120,
         );
-        let expected = format!("v{}", env!("CARGO_PKG_VERSION"));
+        let expected = format!("v{}", env!("DEEPSEEK_BUILD_VERSION"));
         assert!(
             rendered.contains(&expected),
             "expected version chip `{expected}` in header: {rendered:?}",
@@ -670,7 +670,7 @@ mod tests {
             .with_usage(1_000, Some(128_000), 0.0, Some(2_000)),
             12,
         );
-        let version = format!("v{}", env!("CARGO_PKG_VERSION"));
+        let version = format!("v{}", env!("DEEPSEEK_BUILD_VERSION"));
         assert!(
             !rendered.contains(&version),
             "version chip should drop under width pressure: {rendered:?}",

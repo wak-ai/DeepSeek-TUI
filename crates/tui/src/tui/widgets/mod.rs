@@ -2400,7 +2400,7 @@ fn build_empty_state_lines(app: &App, area: Rect) -> Vec<Line<'static>> {
     }
 
     let workspace = crate::utils::display_path(&app.workspace);
-    let title = format!(">_ codewhale (v{})", env!("CARGO_PKG_VERSION"));
+    let title = format!(">_ codewhale (v{})", env!("DEEPSEEK_BUILD_VERSION"));
     let model = format!("model: {}  /model to switch", app.model);
     let directory = format!("directory: {workspace}");
     let block_width = [&title, &model, &directory]
@@ -4444,7 +4444,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
-        assert!(rendered.contains(&format!(">_ codewhale (v{})", env!("CARGO_PKG_VERSION"))));
+        assert!(rendered.contains(&format!(">_ codewhale (v{})", env!("DEEPSEEK_BUILD_VERSION"))));
         assert!(rendered.contains("model: deepseek-v4-pro  /model to switch"));
         assert!(rendered.contains("directory: /tmp/codewhale-test-workspace"));
     }
@@ -4465,7 +4465,7 @@ mod tests {
                     .collect::<String>()
             })
             .collect::<Vec<_>>();
-        let title = format!(">_ codewhale (v{})", env!("CARGO_PKG_VERSION"));
+        let title = format!(">_ codewhale (v{})", env!("DEEPSEEK_BUILD_VERSION"));
         let model = "model: deepseek-v4-pro  /model to switch";
         let directory = "directory: /tmp/codewhale-test-workspace";
         let block_width = [title.as_str(), model, directory]
