@@ -54,27 +54,51 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 fn strip_attachment_markers(input: &str, cursor_char: usize) -> (String, usize) {
     let mut out = String::with_capacity(input.len());
-    let mut removed_before_cursor = 0usize;
-    let mut pos = 0usize;
+    let mut new_cursor = cursor_char;
+    let mut in_pos = 0usize;
+    let mut out_pos = 0usize;
+    let mut marker_index = 0usize;
+
     for line in input.split_inclusive('\n') {
-        let line_chars: usize = line.chars().count();
+        let line_chars = line.chars().count();
+        let trimmed = line.trim();
         let is_marker =
-            line.trim().starts_with("[Attached ") && line.trim().ends_with(']');
+            trimmed.starts_with("[Attached ") && trimmed.ends_with(']');
+
         if is_marker {
-            let line_end = pos + line_chars;
-            if cursor_char > line_end {
-                removed_before_cursor += line_chars;
-            } else if cursor_char >= pos {
-                removed_before_cursor += cursor_char - pos;
+            marker_index += 1;
+            let badge = format!("[img#{}]", marker_index);
+            let badge_chars = badge.chars().count();
+
+            if out.ends_with('\n') {
+                out.pop();
+                out.push(' ');
+            }
+
+            let badge_start = out_pos;
+            out.push_str(&badge);
+            out_pos += badge_chars;
+
+            if line.ends_with('\n') {
+                out.push(' ');
+                out_pos += 1;
+            }
+
+            let replaced_with = out_pos - badge_start;
+            if cursor_char >= in_pos && cursor_char < in_pos + line_chars {
+                new_cursor = badge_start;
+            } else if cursor_char >= in_pos + line_chars {
+                let diff = line_chars as isize - replaced_with as isize;
+                new_cursor = (new_cursor as isize - diff).max(0) as usize;
             }
         } else {
             out.push_str(line);
+            out_pos += line_chars;
         }
-        pos += line_chars;
+        in_pos += line_chars;
     }
-    let new_cursor = cursor_char
-        .saturating_sub(removed_before_cursor)
-        .min(out.chars().count());
+
+    new_cursor = new_cursor.min(out.chars().count());
     (out, new_cursor)
 }
 
