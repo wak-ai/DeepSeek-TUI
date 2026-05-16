@@ -2896,6 +2896,34 @@ impl App {
         true
     }
 
+    pub fn remove_attachment_at_cursor(&mut self) -> bool {
+        let references = crate::tui::file_mention::media_attachment_references(&self.input);
+        let cursor_byte = byte_index_at_char(&self.input, self.cursor_position);
+        let Some((idx, reference)) = references
+            .iter()
+            .enumerate()
+            .find(|(_, r)| cursor_byte >= r.start_byte && cursor_byte <= r.end_byte)
+        else {
+            return false;
+        };
+        let reference = reference.clone();
+        let new_cursor_byte = reference.start_byte;
+        self.input
+            .replace_range(reference.start_byte..reference.end_byte, "");
+        self.cursor_position = self.input[..new_cursor_byte.min(self.input.len())]
+            .chars()
+            .count();
+        let remaining = self.composer_attachment_count();
+        self.selected_attachment_index = if remaining == 0 {
+            None
+        } else {
+            Some(idx.min(remaining.saturating_sub(1)))
+        };
+        self.status_message = Some(format!("Removed attachment: {}", reference.path));
+        self.needs_redraw = true;
+        true
+    }
+
     pub fn flush_paste_burst_if_due(&mut self, now: Instant) -> bool {
         match self.paste_burst.flush_if_due(now) {
             FlushResult::Paste(text) => {
