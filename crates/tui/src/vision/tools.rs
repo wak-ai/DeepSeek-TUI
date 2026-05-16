@@ -1,6 +1,6 @@
 //! `image_analyze` tool — analyze images using a dedicated vision model.
 
-use std::path::{Component, Path};
+use std::path::Path;
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -102,24 +102,20 @@ impl ToolSpec for ImageAnalyzeTool {
     }
 
     async fn execute(&self, input: Value, context: &ToolContext) -> Result<ToolResult, ToolError> {
-        let image_path = required_str(&input, "image_path")?;
+        let image_path = required_str(&input, "image_path")
+            .or_else(|_| required_str(&input, "path"))
+            .or_else(|_| required_str(&input, "file_path"))?;
         let prompt = input
             .get("prompt")
             .and_then(|v| v.as_str())
-            .unwrap_or("Describe this image in detail.");
+            .unwrap_or("Describe this image in detail. Respond in English.");
 
         let image_path_buf = Path::new(image_path);
-        if image_path_buf.components().any(|c| {
-            matches!(
-                c,
-                Component::Prefix(_) | Component::RootDir | Component::ParentDir
-            )
-        }) {
-            return Err(ToolError::execution_failed(
-                "image_path must be a relative path within the workspace and cannot escape it.",
-            ));
-        }
-        let resolved_path = context.workspace.join(image_path_buf);
+        let resolved_path = if image_path_buf.is_absolute() {
+            image_path_buf.to_path_buf()
+        } else {
+            context.workspace.join(image_path_buf)
+        };
         let (image_data, mime_type) = Self::read_image_file(&resolved_path).await?;
 
         let payload = json!({
@@ -263,42 +259,38 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn execute_rejects_absolute_path() {
-        // Trust-boundary pin: image_path must stay inside the workspace
-        // — an absolute path or a `..`-traversing path must reject
-        // before any base64 / API call.
+    async fn execute_resolves_absolute_path() {
         let tmp = tempdir().expect("tempdir");
+        let img_path = tmp.path().join("test.png");
+        std::fs::write(&img_path, b"not-a-real-png").expect("write");
         let ctx = ToolContext::new(tmp.path().to_path_buf());
         let tool = ImageAnalyzeTool::new(fake_config());
-        let outside_workspace = if cfg!(windows) {
-            r"C:\Windows\System32\drivers\etc\hosts"
-        } else {
-            "/etc/hosts"
-        };
         let err = tool
-            .execute(json!({"image_path": outside_workspace}), &ctx)
+            .execute(
+                json!({"image_path": img_path.to_str().unwrap()}),
+                &ctx,
+            )
             .await
-            .expect_err("absolute path must reject");
+            .expect_err("network call should fail, but path should resolve");
         assert!(
-            err.to_string()
-                .contains("relative path within the workspace"),
-            "error must call out the workspace boundary; got {err}"
+            err.to_string().contains("Vision API request failed"),
+            "should reach API call (path accepted); got {err}"
         );
     }
 
     #[tokio::test]
-    async fn execute_rejects_parent_dir_traversal() {
+    async fn execute_resolves_relative_path() {
         let tmp = tempdir().expect("tempdir");
+        std::fs::write(tmp.path().join("photo.png"), b"not-a-real-png").expect("write");
         let ctx = ToolContext::new(tmp.path().to_path_buf());
         let tool = ImageAnalyzeTool::new(fake_config());
         let err = tool
-            .execute(json!({"image_path": "../escape.png"}), &ctx)
+            .execute(json!({"image_path": "photo.png"}), &ctx)
             .await
-            .expect_err("`..`-traversal must reject");
+            .expect_err("network call should fail, but path should resolve");
         assert!(
-            err.to_string()
-                .contains("relative path within the workspace"),
-            "error must call out the workspace boundary; got {err}"
+            err.to_string().contains("Vision API request failed"),
+            "should reach API call (relative path resolved); got {err}"
         );
     }
 }

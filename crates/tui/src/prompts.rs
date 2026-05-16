@@ -28,6 +28,9 @@ pub struct PromptSessionContext<'a> {
     /// to the system prompt instructing the model to respond in
     /// the resolved session locale.
     pub translation_enabled: bool,
+    /// When true, the system prompt includes guidance about the
+    /// `image_analyze` tool for vision / image analysis.
+    pub vision_enabled: bool,
 }
 
 /// Conventional location for the structured session relay artifact (#32).
@@ -549,6 +552,7 @@ pub fn system_prompt_for_mode_with_context_and_skills(
             project_context_pack_enabled: true,
             locale_tag: "en",
             translation_enabled: false,
+            vision_enabled: false,
         },
     )
 }
@@ -638,6 +642,19 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
         full_prompt = format!(
             "{full_prompt}\n\n{}",
             translation_output_instruction(session_context.locale_tag)
+        );
+    }
+
+    // 2.3b. Vision / image analysis guidance — tells the model to
+    // use `image_analyze` for image files instead of `read_file`.
+    if session_context.vision_enabled {
+        full_prompt.push_str(
+            "\n\n## Vision / Image Analysis\n\n\
+             You have the `image_analyze` tool available for analyzing images. \
+             When the user references an image file (PNG, JPEG, GIF, WebP, or BMP), \
+             use `image_analyze` with the file path — do NOT use `read_file` for \
+             binary image files. The `image_analyze` tool accepts both absolute and \
+             relative paths."
         );
     }
 
@@ -881,6 +898,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "zh-Hans",
                 translation_enabled: false,
+                vision_enabled: false,
             },
             ApprovalMode::Suggest,
         ) {
@@ -950,6 +968,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "zh-Hans",
                 translation_enabled: false,
+                vision_enabled: false,
             },
             ApprovalMode::Suggest,
         ) {
@@ -994,6 +1013,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "en",
                 translation_enabled: false,
+                vision_enabled: false,
             },
             ApprovalMode::Suggest,
         ) {
@@ -1083,6 +1103,7 @@ mod tests {
                 project_context_pack_enabled: true,
                 locale_tag: "ja",
                 translation_enabled: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1118,6 +1139,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "en",
                 translation_enabled: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1145,6 +1167,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "en",
                 translation_enabled: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1174,6 +1197,7 @@ mod tests {
                 project_context_pack_enabled: false,
                 locale_tag: "en",
                 translation_enabled: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1201,6 +1225,7 @@ mod tests {
                 project_context_pack_enabled: true,
                 locale_tag: "en",
                 translation_enabled: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1395,6 +1420,7 @@ mod tests {
                 project_context_pack_enabled: true,
                 locale_tag: "en",
                 translation_enabled: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
@@ -1428,6 +1454,7 @@ mod tests {
                 project_context_pack_enabled: true,
                 locale_tag: "en",
                 translation_enabled: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,

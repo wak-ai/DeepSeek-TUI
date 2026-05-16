@@ -434,6 +434,8 @@ impl Engine {
                     project_context_pack_enabled: config.project_context_pack_enabled,
                     locale_tag: &config.locale_tag,
                     translation_enabled: config.translation_enabled,
+                    vision_enabled: config.features.enabled(Feature::VisionModel)
+                        && config.vision_config.is_some(),
                 },
                 session.approval_mode,
             );
@@ -1792,6 +1794,8 @@ impl Engine {
                 project_context_pack_enabled: self.config.project_context_pack_enabled,
                 locale_tag: &self.config.locale_tag,
                 translation_enabled: self.config.translation_enabled,
+                vision_enabled: self.config.features.enabled(Feature::VisionModel)
+                    && self.config.vision_config.is_some(),
             },
             self.session.approval_mode,
         );
