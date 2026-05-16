@@ -3573,7 +3573,10 @@ impl Config {
     pub fn vision_model_config(&self) -> Option<VisionModelConfig> {
         let mut config = self.vision_model.clone()?;
         if config.api_key.is_none() {
-            config.api_key = self.api_key.clone();
+            config.api_key = std::env::var("VISION_MODEL_API_KEY")
+                .ok()
+                .filter(|k| !k.trim().is_empty())
+                .or_else(|| self.api_key.clone());
         }
         Some(config)
     }
