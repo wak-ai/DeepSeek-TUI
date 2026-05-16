@@ -654,7 +654,10 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
              When the user references an image file (PNG, JPEG, GIF, WebP, or BMP), \
              use `image_analyze` with the file path — do NOT use `read_file` for \
              binary image files. The `image_analyze` tool accepts both absolute and \
-             relative paths."
+             relative paths.\n\n\
+             IMPORTANT: When discussing image analysis results, always respond in English. \
+             The vision model returns English descriptions — present them in English and \
+             write all your commentary, explanations, and follow-up questions in English."
         );
     }
 
