@@ -2354,7 +2354,7 @@ fn clipboard_image_paste_keeps_adjacent_text_and_concise_status() {
         app.input
             .contains("before\n[Attached image: 8x4 PNG (2KB) at /tmp/pasted.png]")
     );
-    assert!(app.input.contains("] after"));
+    assert!(app.input.contains("]\n after") || app.input.contains("]\nafter"));
     let status = app.status_message.as_deref().expect("status message");
     assert_eq!(status, "Attached image: 8x4 PNG (2KB)");
 }

@@ -4092,11 +4092,11 @@ impl App {
         let needs_prefix_newline = self.input[..byte_index]
             .chars()
             .last()
-            .is_some_and(|ch| !ch.is_whitespace());
+            .is_some_and(|ch| ch != '\n');
         let needs_suffix_newline = self.input[byte_index..]
             .chars()
             .next()
-            .is_some_and(|ch| !ch.is_whitespace());
+            .is_some_and(|ch| ch != '\n');
 
         let mut inserted = String::new();
         if needs_prefix_newline {
