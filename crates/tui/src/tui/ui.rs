@@ -3239,6 +3239,78 @@ async fn run_event_loop(
                     app.delete_char_forward();
                 }
                 KeyCode::Delete => {}
+                KeyCode::Left
+                    if key.modifiers.contains(KeyModifiers::SHIFT)
+                        && is_word_cursor_modifier(key.modifiers) =>
+                {
+                    app.begin_or_extend_selection();
+                    let text = app.input.clone();
+                    let mut pos = app.cursor_position;
+                    if pos > 0 {
+                        pos -= 1;
+                        while pos > 0 {
+                            let byte =
+                                crate::tui::app::byte_index_at_char_pub(&text, pos);
+                            let ch = text[byte..].chars().next().unwrap_or(' ');
+                            if !ch.is_whitespace() {
+                                break;
+                            }
+                            pos -= 1;
+                        }
+                        while pos > 0 {
+                            let byte =
+                                crate::tui::app::byte_index_at_char_pub(&text, pos - 1);
+                            let ch = text[byte..].chars().next().unwrap_or(' ');
+                            if ch.is_whitespace() {
+                                break;
+                            }
+                            pos -= 1;
+                        }
+                    }
+                    app.cursor_position = pos;
+                    app.update_selection_head();
+                }
+                KeyCode::Right
+                    if key.modifiers.contains(KeyModifiers::SHIFT)
+                        && is_word_cursor_modifier(key.modifiers) =>
+                {
+                    app.begin_or_extend_selection();
+                    let text = app.input.clone();
+                    let total = text.chars().count();
+                    let mut pos = app.cursor_position;
+                    while pos < total {
+                        let byte =
+                            crate::tui::app::byte_index_at_char_pub(&text, pos);
+                        let ch = text[byte..].chars().next().unwrap_or(' ');
+                        if ch.is_whitespace() {
+                            break;
+                        }
+                        pos += 1;
+                    }
+                    while pos < total {
+                        let byte =
+                            crate::tui::app::byte_index_at_char_pub(&text, pos);
+                        let ch = text[byte..].chars().next().unwrap_or(' ');
+                        if !ch.is_whitespace() {
+                            break;
+                        }
+                        pos += 1;
+                    }
+                    app.cursor_position = pos;
+                    app.update_selection_head();
+                }
+                KeyCode::Left if key.modifiers == KeyModifiers::SHIFT => {
+                    app.begin_or_extend_selection();
+                    app.cursor_position = app.cursor_position.saturating_sub(1);
+                    app.update_selection_head();
+                }
+                KeyCode::Right if key.modifiers == KeyModifiers::SHIFT => {
+                    app.begin_or_extend_selection();
+                    if app.cursor_position < app.input.chars().count() {
+                        app.cursor_position += 1;
+                    }
+                    app.update_selection_head();
+                }
                 KeyCode::Left if is_word_cursor_modifier(key.modifiers) => {
                     app.move_cursor_word_backward();
                 }
@@ -3251,6 +3323,16 @@ async fn run_event_loop(
                 KeyCode::Right => {
                     app.move_cursor_right();
                 }
+                KeyCode::Home if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                    app.begin_or_extend_selection();
+                    app.cursor_position = 0;
+                    app.update_selection_head();
+                }
+                KeyCode::End if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                    app.begin_or_extend_selection();
+                    app.cursor_position = app.input.chars().count();
+                    app.update_selection_head();
+                }
                 KeyCode::Home if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     if let Some(anchor) =
                         TranscriptScroll::anchor_for(app.viewport.transcript_cache.line_meta(), 0)
@@ -3260,6 +3342,9 @@ async fn run_event_loop(
                 }
                 KeyCode::End if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     app.scroll_to_bottom();
+                }
+                KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::SUPER) => {
+                    app.select_all();
                 }
                 KeyCode::Home | KeyCode::Char('a')
                     if key.modifiers.contains(KeyModifiers::CONTROL) =>

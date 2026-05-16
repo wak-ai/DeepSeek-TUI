@@ -372,6 +372,10 @@ fn char_count(text: &str) -> usize {
     text.chars().count()
 }
 
+pub fn byte_index_at_char_pub(text: &str, char_index: usize) -> usize {
+    byte_index_at_char(text, char_index)
+}
+
 fn byte_index_at_char(text: &str, char_index: usize) -> usize {
     if char_index == 0 {
         return 0;
@@ -607,6 +611,37 @@ pub struct MentionCompletionCache {
     pub entries: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ComposerSelection {
+    pub anchor: Option<usize>,
+    pub head: Option<usize>,
+    pub dragging: bool,
+}
+
+impl ComposerSelection {
+    pub fn clear(&mut self) {
+        self.anchor = None;
+        self.head = None;
+        self.dragging = false;
+    }
+
+    pub fn is_active(&self) -> bool {
+        match (self.anchor, self.head) {
+            (Some(a), Some(h)) => a != h,
+            _ => false,
+        }
+    }
+
+    pub fn ordered_range(&self) -> Option<(usize, usize)> {
+        let a = self.anchor?;
+        let h = self.head?;
+        if a == h {
+            return None;
+        }
+        Some(if a < h { (a, h) } else { (h, a) })
+    }
+}
+
 /// Composer input state — grouped fields for the text input area.
 pub struct ComposerState {
     /// Current composer text content.
@@ -638,6 +673,7 @@ pub struct ComposerState {
     /// user presses `d` in Normal mode; cleared on the next key (either `d`
     /// to complete `dd`, or any other key to cancel).
     pub vim_pending_d: bool,
+    pub selection: ComposerSelection,
 }
 
 impl Default for ComposerState {
@@ -661,6 +697,7 @@ impl Default for ComposerState {
             vim_enabled: false,
             vim_mode: VimMode::Normal,
             vim_pending_d: false,
+            selection: ComposerSelection::default(),
         }
     }
 }
@@ -1467,6 +1504,7 @@ impl App {
                 vim_enabled: composer_vim_enabled,
                 vim_mode: VimMode::Normal,
                 vim_pending_d: false,
+                selection: ComposerSelection::default(),
             },
             viewport: ViewportState::default(),
             goal: GoalState::default(),
@@ -2722,6 +2760,7 @@ impl App {
     }
 
     pub fn insert_paste_text(&mut self, text: &str) {
+        self.delete_selection();
         if let Some(pending) = self.paste_burst.flush_before_modified_input() {
             self.insert_str(&pending);
         }
@@ -2970,6 +3009,7 @@ impl App {
     }
 
     pub fn insert_char(&mut self, c: char) {
+        self.delete_selection();
         self.clear_input_history_navigation();
         self.selected_attachment_index = None;
         let cursor = self.cursor_position.min(char_count(&self.input));
@@ -2996,6 +3036,9 @@ impl App {
     }
 
     pub fn delete_char(&mut self) {
+        if self.delete_selection().is_some() {
+            return;
+        }
         self.clear_input_history_navigation();
         self.selected_attachment_index = None;
         if self.cursor_position == 0 {
@@ -3013,6 +3056,9 @@ impl App {
     }
 
     pub fn delete_char_forward(&mut self) {
+        if self.delete_selection().is_some() {
+            return;
+        }
         self.clear_input_history_navigation();
         self.selected_attachment_index = None;
         if self.input.is_empty() {
@@ -3031,6 +3077,9 @@ impl App {
 
     /// Delete the word before the cursor.
     pub fn delete_word_backward(&mut self) {
+        if self.delete_selection().is_some() {
+            return;
+        }
         self.clear_input_history_navigation();
         self.selected_attachment_index = None;
         if self.cursor_position == 0 {
@@ -3072,6 +3121,9 @@ impl App {
 
     /// Delete from the cursor to the start of the line.
     pub fn delete_to_start_of_line(&mut self) {
+        if self.delete_selection().is_some() {
+            return;
+        }
         self.clear_input_history_navigation();
         self.selected_attachment_index = None;
         if self.cursor_position == 0 {
@@ -3097,6 +3149,9 @@ impl App {
 
     /// Delete the word after the cursor.
     pub fn delete_word_forward(&mut self) {
+        if self.delete_selection().is_some() {
+            return;
+        }
         self.clear_input_history_navigation();
         self.selected_attachment_index = None;
         let cursor_byte = byte_index_at_char(&self.input, self.cursor_position);
@@ -3141,6 +3196,10 @@ impl App {
     ///
     /// Returns `true` when bytes were moved into the kill buffer.
     pub fn kill_to_end_of_line(&mut self) -> bool {
+        if let Some(removed) = self.delete_selection() {
+            self.kill_buffer = removed;
+            return true;
+        }
         self.clear_input_history_navigation();
         let total_chars = char_count(&self.input);
         let cursor = self.cursor_position.min(total_chars);
@@ -3201,11 +3260,13 @@ impl App {
     }
 
     pub fn move_cursor_left(&mut self) {
+        self.composer.selection.clear();
         self.cursor_position = self.cursor_position.saturating_sub(1);
         self.needs_redraw = true;
     }
 
     pub fn move_cursor_right(&mut self) {
+        self.composer.selection.clear();
         if self.cursor_position < char_count(&self.input) {
             self.cursor_position += 1;
             self.needs_redraw = true;
@@ -3213,11 +3274,13 @@ impl App {
     }
 
     pub fn move_cursor_start(&mut self) {
+        self.composer.selection.clear();
         self.cursor_position = 0;
         self.needs_redraw = true;
     }
 
     pub fn move_cursor_end(&mut self) {
+        self.composer.selection.clear();
         self.cursor_position = char_count(&self.input);
         self.needs_redraw = true;
     }
@@ -3225,6 +3288,7 @@ impl App {
     /// Move forward one word. Skips over the current word then any trailing
     /// whitespace to land on the first character of the next word.
     pub fn move_cursor_word_forward(&mut self) {
+        self.composer.selection.clear();
         let text = self.input.clone();
         let total = char_count(&text);
         let mut pos = self.cursor_position;
@@ -3256,6 +3320,7 @@ impl App {
     /// Move backward one word. Skips leading whitespace then the preceding
     /// word to land on its first character.
     pub fn move_cursor_word_backward(&mut self) {
+        self.composer.selection.clear();
         let text = self.input.clone();
         let mut pos = self.cursor_position;
         if pos == 0 {
@@ -3285,7 +3350,77 @@ impl App {
         self.needs_redraw = true;
     }
 
+    pub fn clear_composer_selection(&mut self) {
+        if self.composer.selection.is_active() || self.composer.selection.anchor.is_some() {
+            self.composer.selection.clear();
+            self.needs_redraw = true;
+        }
+    }
+
+    pub fn begin_or_extend_selection(&mut self) {
+        if self.composer.selection.anchor.is_none() {
+            self.composer.selection.anchor = Some(self.cursor_position);
+        }
+    }
+
+    pub fn update_selection_head(&mut self) {
+        self.composer.selection.head = Some(self.cursor_position);
+        self.needs_redraw = true;
+    }
+
+    pub fn delete_selection(&mut self) -> Option<String> {
+        let (start, end) = self.composer.selection.ordered_range()?;
+        let start_byte = byte_index_at_char(&self.input, start);
+        let end_byte = byte_index_at_char(&self.input, end);
+        let removed = self.input[start_byte..end_byte].to_string();
+        self.input.replace_range(start_byte..end_byte, "");
+        self.cursor_position = start;
+        self.composer.selection.clear();
+        self.slash_menu_hidden = false;
+        self.mention_menu_hidden = false;
+        self.mention_menu_selected = 0;
+        self.needs_redraw = true;
+        Some(removed)
+    }
+
+    pub fn select_all(&mut self) {
+        let total = char_count(&self.input);
+        if total == 0 {
+            return;
+        }
+        self.composer.selection.anchor = Some(0);
+        self.composer.selection.head = Some(total);
+        self.cursor_position = total;
+        self.needs_redraw = true;
+    }
+
+    pub fn copy_composer_selection(&mut self) -> bool {
+        if let Some((start, end)) = self.composer.selection.ordered_range() {
+            let start_byte = byte_index_at_char(&self.input, start);
+            let end_byte = byte_index_at_char(&self.input, end);
+            let text = self.input[start_byte..end_byte].to_string();
+            if self.clipboard.write_text(&text).is_ok() {
+                self.status_message = Some("Copied".to_string());
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn cut_composer_selection(&mut self) -> bool {
+        if let Some((start, end)) = self.composer.selection.ordered_range() {
+            let start_byte = byte_index_at_char(&self.input, start);
+            let end_byte = byte_index_at_char(&self.input, end);
+            let text = self.input[start_byte..end_byte].to_string();
+            let _ = self.clipboard.write_text(&text);
+            self.delete_selection();
+            return true;
+        }
+        false
+    }
+
     pub fn move_cursor_up(&mut self) {
+        self.composer.selection.clear();
         let text = self.input.clone();
         let cursor_byte = byte_index_at_char(&text, self.cursor_position);
         if let Some(prev_nl) = text[..cursor_byte].rfind('\n') {
@@ -3302,6 +3437,7 @@ impl App {
     }
 
     pub fn move_cursor_down(&mut self) {
+        self.composer.selection.clear();
         let text = self.input.clone();
         let total = char_count(&text);
         if self.cursor_position >= total {

@@ -94,7 +94,11 @@ pub(crate) fn handle_mouse_event(app: &mut App, mouse: MouseEvent) -> Vec<ViewEv
             }
 
             if let Some(idx) = try_composer_click(app, mouse) {
+                app.composer.selection.clear();
                 app.cursor_position = idx;
+                app.composer.selection.anchor = Some(idx);
+                app.composer.selection.head = Some(idx);
+                app.composer.selection.dragging = true;
                 app.needs_redraw = true;
                 return Vec::new();
             }
@@ -123,9 +127,22 @@ pub(crate) fn handle_mouse_event(app: &mut App, mouse: MouseEvent) -> Vec<ViewEv
                 return Vec::new();
             }
 
+            if app.composer.selection.dragging {
+                if let Some(idx) = try_composer_click(app, mouse) {
+                    app.cursor_position = idx;
+                    app.composer.selection.head = Some(idx);
+                    app.needs_redraw = true;
+                }
+                return Vec::new();
+            }
+
             if app.viewport.transcript_selection.dragging {
                 update_selection_drag(app, mouse);
             }
+        }
+        MouseEventKind::Up(MouseButton::Left) if app.composer.selection.dragging => {
+            app.composer.selection.dragging = false;
+            app.needs_redraw = true;
         }
         MouseEventKind::Up(MouseButton::Left) if app.viewport.transcript_scrollbar_dragging => {
             app.viewport.transcript_scrollbar_dragging = false;

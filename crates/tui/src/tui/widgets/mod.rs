@@ -674,6 +674,51 @@ impl Renderable for ComposerWidget<'_> {
                 placeholder,
                 Style::default().fg(palette::TEXT_MUTED).italic(),
             )));
+        } else if let Some((sel_start, sel_end)) =
+            self.app.composer.selection.ordered_range()
+        {
+            let normal = Style::default().fg(palette::TEXT_PRIMARY);
+            let sel_style = Style::default()
+                .fg(palette::SELECTION_TEXT)
+                .bg(self.app.ui_theme.selection_bg);
+            let (sel_start_row, sel_start_col) =
+                cursor_row_col(input_text, sel_start, content_width);
+            let (sel_end_row, sel_end_col) =
+                cursor_row_col(input_text, sel_end, content_width);
+            let vis_start = {
+                let total = wrap_input_lines(input_text, content_width).len().max(1);
+                let (cr, _) = cursor_row_col(input_text, input_cursor, content_width);
+                let mh = input_rows_budget.max(1);
+                let mut s = 0usize;
+                if cr >= mh {
+                    s = cr + 1 - mh;
+                }
+                if s + mh > total {
+                    s = total.saturating_sub(mh);
+                }
+                s
+            };
+            for (i, line_text) in visible_lines.iter().enumerate() {
+                let abs_row = vis_start + i;
+                if abs_row < sel_start_row || abs_row > sel_end_row {
+                    input_lines.push(Line::from(Span::styled(line_text.clone(), normal)));
+                } else if abs_row > sel_start_row && abs_row < sel_end_row {
+                    input_lines
+                        .push(Line::from(Span::styled(line_text.clone(), sel_style)));
+                } else {
+                    let c0 =
+                        if abs_row == sel_start_row { sel_start_col } else { 0 };
+                    let c1 = if abs_row == sel_end_row {
+                        sel_end_col
+                    } else {
+                        usize::MAX
+                    };
+                    let base =
+                        Line::from(Span::styled(line_text.clone(), normal));
+                    input_lines
+                        .push(Line::from(apply_selection_to_line(&base, c0, c1, sel_style)));
+                }
+            }
         } else {
             for line in &visible_lines {
                 input_lines.push(Line::from(Span::styled(
