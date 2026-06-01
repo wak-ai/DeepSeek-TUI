@@ -2039,6 +2039,22 @@ async fn model_change_update_syncs_engine_model_before_compaction() {
     }
 }
 
+#[tokio::test]
+async fn mode_change_update_notifies_engine() {
+    let mut app = create_test_app();
+    let _ = app.set_mode(crate::tui::app::AppMode::Plan);
+    let mut engine = crate::core::engine::mock_engine_handle();
+
+    assert!(apply_mode_update(&mut app, &engine.handle, crate::tui::app::AppMode::Yolo).await);
+
+    match engine.rx_op.recv().await.expect("change mode op") {
+        crate::core::ops::Op::ChangeMode { mode } => {
+            assert_eq!(mode, crate::tui::app::AppMode::Yolo);
+        }
+        other => panic!("expected ChangeMode, got {other:?}"),
+    }
+}
+
 #[test]
 fn saved_default_provider_syncs_back_to_runtime_config() {
     let _home = SettingsHomeGuard::new();

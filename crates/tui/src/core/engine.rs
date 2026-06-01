@@ -784,6 +784,8 @@ impl Engine {
                     let _ = self.tx_event.send(Event::AgentList { agents }).await;
                 }
                 Op::ChangeMode { mode } => {
+                    self.refresh_system_prompt(mode);
+                    self.emit_session_updated().await;
                     let _ = self
                         .tx_event
                         .send(Event::status(format!("Mode changed to: {mode:?}")))
