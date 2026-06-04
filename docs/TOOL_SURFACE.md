@@ -262,6 +262,20 @@ prompting and tool catalogs. Do not use these names in new active guidance:
 The old one-shot `rlm` model-facing tool is also replaced by persistent
 `rlm_open` / `rlm_eval` / `rlm_configure` / `rlm_close` sessions.
 
+v0.9.0 adds the following hidden-compat aliases (#2682, #2683):
+
+| Hidden alias | Canonical replacement | Status |
+|---|---|---|
+| `todo_write` | `checklist_write` | Hidden, returns `_deprecation` metadata |
+| `todo_add` | `checklist_add` | Hidden, returns `_deprecation` metadata |
+| `todo_update` | `checklist_update` | Hidden, returns `_deprecation` metadata |
+| `todo_list` | `checklist_list` | Hidden, returns `_deprecation` metadata |
+| `exec_wait` | `exec_shell_wait` | Hidden, callable for replay |
+| `exec_interact` | `exec_shell_interact` | Hidden, callable for replay |
+
+All hidden aliases remain registered and callable so saved transcripts can
+replay without teaching new sessions the deprecated spelling.
+
 Historical compatibility results may include a `_deprecation` block shaped
 like this:
 
