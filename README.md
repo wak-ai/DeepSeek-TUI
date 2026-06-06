@@ -644,10 +644,11 @@ Current v0.9 track credits:
 - **[aboimpinto](https://github.com/aboimpinto)** — sidebar command polish and
   pausable custom-command lifecycle direction harvested into the v0.9 track
   (#2788, #2732)
-- **[lbcheng888](https://github.com/lbcheng888)** and
-  **[AiurArtanis](https://github.com/AiurArtanis)** — VS Code extension
-  scaffold direction and Agent View request that shaped the official Phase 0
-  extension (#1022, #2580)
+- **[lbcheng888](https://github.com/lbcheng888)**,
+  **[AiurArtanis](https://github.com/AiurArtanis)**, and
+  **[nasus9527](https://github.com/nasus9527)** — VS Code extension scaffold
+  direction, Agent View request, and IDE plugin request that shaped the
+  official Phase 0 extension (#1022, #1584, #2580)
 - **[HUQIANTAO](https://github.com/HUQIANTAO)** — `web_run` cache-state
   lock-splitting, turn-metadata prefix-cache stability, and project-context
   cache work (#2502, #2517, #2636)
