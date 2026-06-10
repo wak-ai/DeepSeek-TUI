@@ -176,8 +176,7 @@ pub fn input_cost_note(model: &str) -> Option<String> {
     let pricing = pricing_for_model(model)?;
     Some(format!(
         "Sub-agents are cheap — {} costs ${:.2} per million input tokens.",
-        model,
-        pricing.usd.input_cache_miss_per_million
+        model, pricing.usd.input_cache_miss_per_million
     ))
 }
 
