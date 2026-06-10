@@ -312,6 +312,10 @@ pub fn model_supports_reasoning(model: &str) -> bool {
     if lower.contains("deepseek") && lower.contains("v4") {
         return true;
     }
+    // #3016: Moonshot-native Kimi IDs also emit reasoning_content
+    if lower.starts_with("kimi-") {
+        return true;
+    }
     matches!(
         lower.as_str(),
         "arcee-ai/trinity-large-thinking"
