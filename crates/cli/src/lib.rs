@@ -994,7 +994,18 @@ fn auth_status_all_providers(store: &ConfigStore, secrets: &Secrets) -> Vec<Stri
         let keyring_status = keyring_key.as_ref().map(|_| "set").unwrap_or("-");
         let env_status = env_key.as_ref().map(|_| "set").unwrap_or("-");
 
-        let source = if config_key.is_some() {
+        let source = if provider == ProviderKind::OpenaiCodex {
+            // Keep the summary consistent with `auth status`: Codex auth is
+            // OAuth-file (or env token) based — config/keyring keys are not
+            // consulted for it.
+            if env_key.is_some() {
+                "env"
+            } else if oauth_file_present {
+                "oauth file"
+            } else {
+                "unset"
+            }
+        } else if config_key.is_some() {
             "config"
         } else if keyring_key.is_some() {
             "keyring"

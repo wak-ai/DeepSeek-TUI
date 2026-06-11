@@ -281,9 +281,13 @@ fn load_handoff_block(workspace: &Path) -> Option<String> {
 /// Core: task execution, tool-use rules, output format, toolbox reference,
 /// "When NOT to use" guidance, sub-agent sentinel protocol.
 ///
-/// Rendered from `prompts/constitution.yaml` via `render_constitution.py`.
-/// The YAML is the source of truth; the markdown is the compiled artifact.
-/// Run `python3 render_constitution.py > constitution.md` to regenerate.
+/// `prompts/constitution.yaml` + `render_constitution.py` exist as the
+/// intended generation pipeline, but the renderer is NOT yet reconciled
+/// with this committed markdown (#3015): it emits a much shorter document,
+/// bakes the default model id over the `{model_id}` placeholder, and
+/// duplicates the Authority Recap that `compose` appends at runtime. Do
+/// NOT regenerate this file from the renderer until that gap is closed —
+/// edit the markdown directly and mirror structural changes into the YAML.
 pub const BASE_PROMPT: &str = include_str!("prompts/constitution.md");
 
 // ── Embedder prompt overrides ──

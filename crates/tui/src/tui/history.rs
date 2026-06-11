@@ -4185,7 +4185,26 @@ mod tests {
             .flat_map(|line| line.spans.iter().map(|span| span.content.as_ref()))
             .collect::<String>();
         assert!(text.contains("Full reasoning in Ctrl+O"));
-        assert!(text.contains("reasoning"));
+        // Pin the actual header shape ("… reasoning done") — a bare
+        // `contains("reasoning")` is already satisfied by the Ctrl+O
+        // affordance line above and would never fail on its own.
+        let header = lines
+            .first()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .unwrap_or_default();
+        assert!(
+            header.starts_with(REASONING_OPENER),
+            "header opens with the dotted opener: {header:?}"
+        );
+        assert!(
+            header.contains("reasoning done"),
+            "header carries the reasoning title and done status: {header:?}"
+        );
     }
 
     #[test]
