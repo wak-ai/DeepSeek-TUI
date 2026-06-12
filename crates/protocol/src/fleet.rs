@@ -298,9 +298,17 @@ pub struct FleetAlertPolicy {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum FleetAlertChannel {
-    Slack { webhook_url: String },
-    Webhook { url: String, secret: Option<String> },
-    PagerDuty { routing_key: String, severity: String },
+    Slack {
+        webhook_url: String,
+    },
+    Webhook {
+        url: String,
+        secret: Option<String>,
+    },
+    PagerDuty {
+        routing_key: String,
+        severity: String,
+    },
 }
 
 /// Receipt produced when a task completes verification.
