@@ -6303,7 +6303,7 @@ pub fn clear_active_provider_api_key(provider: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::lock_test_env;
+    use crate::test_support::{EnvVarGuard, lock_test_env};
     use std::collections::HashMap;
     use std::env;
     use std::ffi::OsString;
@@ -11205,9 +11205,12 @@ api_key = "moonshot-platform-key"
         ));
         fs::create_dir_all(&temp_root)?;
         let _guard = EnvGuard::new(&temp_root);
-        unsafe { std::env::set_var("CODEWHALE_SECRET_BACKEND", "local") };
+        let config_path = temp_root.join(".deepseek").join("config.toml");
+        let _config_path = EnvVarGuard::set("CODEWHALE_CONFIG_PATH", config_path.as_os_str());
+        let _secret_backend = EnvVarGuard::set("CODEWHALE_SECRET_BACKEND", "local");
 
         let path = save_api_key_for(ApiProvider::Openrouter, "or-saved-key")?;
+        assert_eq!(path, config_path);
         let contents = fs::read_to_string(&path)?;
         let parsed: toml::Value = toml::from_str(&contents)?;
         assert_eq!(
@@ -11219,7 +11222,8 @@ api_key = "moonshot-platform-key"
             Some("or-saved-key")
         );
         // Re-saving must not duplicate or wipe sibling tables.
-        save_api_key_for(ApiProvider::Novita, "novita-saved-key")?;
+        let novita_path = save_api_key_for(ApiProvider::Novita, "novita-saved-key")?;
+        assert_eq!(novita_path, path);
         let contents = fs::read_to_string(&path)?;
         let parsed: toml::Value = toml::from_str(&contents)?;
         assert_eq!(
@@ -11238,12 +11242,16 @@ api_key = "moonshot-platform-key"
                 .and_then(toml::Value::as_str),
             Some("novita-saved-key")
         );
-        save_api_key_for(ApiProvider::Openai, "openai-saved-key")?;
-        save_api_key_for(ApiProvider::WanjieArk, "wanjie-saved-key")?;
-        save_api_key_for(ApiProvider::Fireworks, "fireworks-saved-key")?;
-        save_api_key_for(ApiProvider::XiaomiMimo, "mimo-saved-key")?;
-        save_api_key_for(ApiProvider::Siliconflow, "sf-saved-key")?;
-        save_api_key_for(ApiProvider::Sglang, "sglang-saved-key")?;
+        for (provider, key) in [
+            (ApiProvider::Openai, "openai-saved-key"),
+            (ApiProvider::WanjieArk, "wanjie-saved-key"),
+            (ApiProvider::Fireworks, "fireworks-saved-key"),
+            (ApiProvider::XiaomiMimo, "mimo-saved-key"),
+            (ApiProvider::Siliconflow, "sf-saved-key"),
+            (ApiProvider::Sglang, "sglang-saved-key"),
+        ] {
+            assert_eq!(save_api_key_for(provider, key)?, path);
+        }
         let contents = fs::read_to_string(&path)?;
         let parsed: toml::Value = toml::from_str(&contents)?;
         assert_eq!(
@@ -11330,9 +11338,12 @@ api_key = "moonshot-platform-key"
         ));
         fs::create_dir_all(&temp_root)?;
         let _guard = EnvGuard::new(&temp_root);
-        unsafe { std::env::set_var("DEEPSEEK_SECRET_BACKEND", "local") };
+        let config_path = temp_root.join(".deepseek").join("config.toml");
+        let _config_path = EnvVarGuard::set("CODEWHALE_CONFIG_PATH", config_path.as_os_str());
+        let _secret_backend = EnvVarGuard::set("DEEPSEEK_SECRET_BACKEND", "local");
 
         let path = save_api_key_for(ApiProvider::DeepseekCN, "cn-saved-key")?;
+        assert_eq!(path, config_path);
         let contents = fs::read_to_string(&path)?;
         let parsed: toml::Value = toml::from_str(&contents)?;
 
