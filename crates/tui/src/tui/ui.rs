@@ -4875,6 +4875,11 @@ fn reconcile_turn_liveness(app: &mut App, now: Instant, has_running_agents: bool
             now.saturating_duration_since(started) > DISPATCH_WATCHDOG_TIMEOUT
         })
     {
+        // #2739: the user's prompt was already appended to api_messages
+        // before dispatch, but the turn never reached `in_progress`. Persist
+        // it before clearing turn state so `--continue` keeps the prompt
+        // instead of loading the previous save.
+        persist_recovery_snapshot(app);
         app.is_loading = false;
         app.dispatch_started_at = None;
         app.turn_started_at = None;
