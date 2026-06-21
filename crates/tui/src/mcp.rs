@@ -2631,18 +2631,7 @@ pub fn load_config_with_workspace(global_path: &Path, workspace: &Path) -> Resul
     let mut project = load_config(&project_path)?;
     for server in project.servers.values_mut() {
         if server.command.is_some() && server.url.is_none() {
-            let cwd = match server.cwd.as_deref() {
-                Some(cwd) if cwd.is_relative() => normalize_path_components(&workspace.join(cwd)),
-                Some(cwd) => normalize_path_components(cwd),
-                None => workspace.to_path_buf(),
-            };
-            if !cwd.starts_with(&workspace) {
-                anyhow::bail!(
-                    "Project MCP server cwd must stay within workspace: {}",
-                    cwd.display()
-                );
-            }
-            server.cwd = Some(cwd);
+            server.cwd = Some(resolve_project_mcp_cwd(&workspace, server.cwd.as_deref())?);
         }
     }
     merged.servers.extend(project.servers);
@@ -2665,6 +2654,24 @@ fn normalize_workspace_path(workspace: &Path) -> PathBuf {
             .join(workspace)
     };
     normalize_path_components(&absolute)
+}
+
+fn resolve_project_mcp_cwd(workspace: &Path, cwd: Option<&Path>) -> Result<PathBuf> {
+    let cwd = match cwd {
+        Some(cwd) if cwd.is_relative() => normalize_path_components(&workspace.join(cwd)),
+        Some(cwd) => normalize_path_components(cwd),
+        None => workspace.to_path_buf(),
+    };
+    let resolved = cwd
+        .canonicalize()
+        .unwrap_or_else(|_| normalize_path_components(&cwd));
+    if !resolved.starts_with(workspace) {
+        anyhow::bail!(
+            "Project MCP server cwd must stay within workspace: {}",
+            resolved.display()
+        );
+    }
+    Ok(resolved)
 }
 
 fn normalize_path_components(path: &Path) -> PathBuf {

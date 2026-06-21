@@ -515,6 +515,35 @@ fn workspace_mcp_config_rejects_project_cwd_escape() {
     );
 }
 
+#[cfg(unix)]
+#[test]
+fn workspace_mcp_config_rejects_symlinked_project_cwd_escape() {
+    let dir = tempfile::tempdir().unwrap();
+    let global_path = dir.path().join("global-mcp.json");
+    let workspace = dir.path().join("workspace");
+    let project_dir = workspace.join(".codewhale");
+    let outside = dir.path().join("outside");
+    fs::create_dir_all(&project_dir).unwrap();
+    fs::create_dir_all(&outside).unwrap();
+    std::os::unix::fs::symlink(&outside, workspace.join("tools")).unwrap();
+    let _trust = mark_workspace_trusted(&workspace);
+    fs::write(&global_path, r#"{"servers": {}}"#).unwrap();
+    fs::write(
+        project_dir.join("mcp.json"),
+        r#"{"servers": {"project": {"command": "node", "args": ["server.js"], "cwd": "tools"}}}"#,
+    )
+    .unwrap();
+
+    let err = load_config_with_workspace(&global_path, &workspace)
+        .expect_err("project MCP symlink cwd escape must be rejected");
+
+    assert!(
+        err.to_string()
+            .contains("Project MCP server cwd must stay within workspace"),
+        "unexpected error: {err}"
+    );
+}
+
 #[tokio::test]
 async fn workspace_mcp_pool_reload_picks_up_project_config_creation() {
     let dir = tempfile::tempdir().unwrap();
