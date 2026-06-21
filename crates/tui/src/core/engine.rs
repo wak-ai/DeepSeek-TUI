@@ -3330,6 +3330,16 @@ pub(super) enum AutoReviewPlanDecision {
     Block(String),
 }
 
+pub(super) fn auto_review_run_origin_for_plan(
+    detached_start: bool,
+) -> crate::tui::auto_review::RunOrigin {
+    if detached_start {
+        crate::tui::auto_review::RunOrigin::Background
+    } else {
+        crate::tui::auto_review::RunOrigin::Interactive
+    }
+}
+
 pub(super) fn auto_review_plan_decision(
     tool_name: &str,
     tool_input: &Value,

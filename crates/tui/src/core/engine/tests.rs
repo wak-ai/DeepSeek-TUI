@@ -359,6 +359,64 @@ fn auto_review_policy_does_not_change_generic_destructive_auto_approval_yet() {
 }
 
 #[test]
+fn auto_review_run_origin_marks_detached_tools_as_background() {
+    assert_eq!(
+        auto_review_run_origin_for_plan(false),
+        crate::tui::auto_review::RunOrigin::Interactive
+    );
+    assert_eq!(
+        auto_review_run_origin_for_plan(true),
+        crate::tui::auto_review::RunOrigin::Background
+    );
+}
+
+#[test]
+fn auto_review_policy_holds_background_destructive_auto_approval() {
+    let (decision, audit) = auto_review_plan_decision(
+        "exec_shell",
+        &json!({"command": "cargo test", "background": true}),
+        crate::tui::auto_review::RunOrigin::Background,
+        crate::tui::approval::ApprovalMode::Auto,
+        Some("run tests in the background"),
+        true,
+        false,
+    );
+
+    assert_eq!(
+        decision,
+        AutoReviewPlanDecision::ForcePrompt(
+            "Auto-review policy requires approval: destructive background/headless actions cannot auto-approve"
+                .to_string()
+        )
+    );
+    assert_eq!(audit["run_origin"], "background");
+    assert_eq!(audit["decision"], "hold_for_review");
+}
+
+#[test]
+fn auto_review_policy_blocks_background_hold_when_approval_is_never() {
+    let (decision, audit) = auto_review_plan_decision(
+        "exec_shell",
+        &json!({"command": "cargo test", "background": true}),
+        crate::tui::auto_review::RunOrigin::Background,
+        crate::tui::approval::ApprovalMode::Never,
+        Some("run tests in the background"),
+        true,
+        false,
+    );
+
+    assert_eq!(
+        decision,
+        AutoReviewPlanDecision::Block(
+            "Auto-review policy requires approval: destructive background/headless actions cannot auto-approve"
+                .to_string()
+        )
+    );
+    assert_eq!(audit["approval_mode"], "NEVER");
+    assert_eq!(audit["run_origin"], "background");
+}
+
+#[test]
 fn exec_shell_ask_rule_decision_prompts_for_matching_auto_command() {
     let config = EngineConfig {
         exec_policy_engine: ask_rule_engine("cargo test"),

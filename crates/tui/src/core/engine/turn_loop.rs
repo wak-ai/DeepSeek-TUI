@@ -1609,7 +1609,7 @@ impl Engine {
                     let (decision, audit_event) = auto_review_plan_decision(
                         &tool_name,
                         &tool_input,
-                        crate::tui::auto_review::RunOrigin::Interactive,
+                        auto_review_run_origin_for_plan(detached_start),
                         self.session.approval_mode,
                         None,
                         crate::config::is_workspace_trusted(&self.session.workspace),
