@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.63] - 2026-06-19
+
 ### Added
 
 - **Sub-agent fanout safeguards (#3318, #3319).** High-fanout Workflow runs can
-  now set `[subagents] max_admitted` to queue and drain more agents than the
-  instantaneous concurrency cap, while `[subagents] token_budget` applies a
-  shared aggregate token ceiling to a root `agent` run and its descendants.
+  now queue and drain more agents than the instantaneous concurrency cap by
+  default, with `[subagents] max_admitted` available to tune that bounded
+  admission population. Distinct `agent` calls are no longer capped by the
+  per-turn loop guard before runtime launch concurrency and provider
+  rate-limit backoff can apply. `[subagents] token_budget` applies a shared
+  aggregate token ceiling to a root `agent` run and its descendants.
 - **Per-worker sub-agent token enforcement (#3321).** A `token_budget` /
   `max_tokens` set on an individual `agent` call now bounds that single worker
   mid-run: once its accumulated model tokens exceed the cap it stops cleanly
@@ -20,9 +25,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   complements the scope-level admission gate (#3319) — the per-worker cap stops
   one runaway worker, the scope cap bounds total fan-out — without
   double-counting. Harvested from #3321 by @donglovejava.
+- **Provider-specific sub-agent fanout config.** `[subagents.providers.<provider>]`
+  profiles now override `enabled`, `max_concurrent`, `max_admitted`,
+  `launch_concurrency`, `max_depth`, token budget, API timeout, and heartbeat
+  timeout for the active provider. Use broad direct-API profiles such as
+  `[subagents.providers.deepseek]` and tighter subscription profiles such as
+  `[subagents.providers.glm]`; `/config subagents status` shows both global
+  and active-provider resolved values.
 
 ### Fixed
 
+- **Config display redaction.** `codew config get/list` now recursively masks
+  token-, secret-, password-, credential-, and authorization-like keys inside
+  unknown `extras` tables and redacts sensitive HTTP header values before
+  printing config output.
+- **Queued follow-up hints and force-steer keys.** The pending-input preview now
+  advertises `Ctrl+S send now` whenever queued follow-ups exist, and
+  Ctrl/Cmd+Enter force-steering also accepts the common Ctrl+J terminal
+  encoding while a turn is running.
+- **Sidebar default visibility restored (#3328).** New and upgraded sessions
+  now use a pinned composed sidebar by default when the terminal is wide
+  enough, so live Agents and Tasks surface without opting back into idle
+  auto-collapse. Older settings files that captured the v0.8.62 auto-collapse
+  default now migrate to `pinned` unless `/sidebar auto --save` records an
+  explicit opt-in. `/sidebar` now reports when width or auto-collapse
+  suppresses rendering instead of saying the sidebar is visible. Reported by
+  @dxfq.
 - **JavaScript execution proxy env handling (#3273, #3331).** `js_execution`
   now enables Node's environment-proxy mode when proxy variables are present,
   mirrors lowercase proxy variables for the child process, and backfills
@@ -2231,7 +2259,8 @@ overflow report and `/theme` picker edge-wrapping patch in #1814.
 
 Older releases (v0.8.39 and earlier) are archived in [docs/CHANGELOG_ARCHIVE.md](docs/CHANGELOG_ARCHIVE.md).
 
-[Unreleased]: https://github.com/Hmbown/CodeWhale/compare/v0.8.62...HEAD
+[Unreleased]: https://github.com/Hmbown/CodeWhale/compare/v0.8.63...HEAD
+[0.8.63]: https://github.com/Hmbown/CodeWhale/compare/v0.8.62...v0.8.63
 [0.8.62]: https://github.com/Hmbown/CodeWhale/compare/v0.8.61...v0.8.62
 [0.8.61]: https://github.com/Hmbown/CodeWhale/compare/v0.8.60...v0.8.61
 [0.8.60]: https://github.com/Hmbown/CodeWhale/compare/v0.8.59...v0.8.60
