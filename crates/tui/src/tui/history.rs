@@ -18,6 +18,7 @@ use crate::tui::diff_render;
 use crate::tui::markdown_render;
 use crate::tui::ui_text::CopyLineSeparator;
 
+mod agent_activity;
 mod archived_context;
 mod checklist;
 mod plan;
@@ -34,6 +35,8 @@ use checklist::{
 use checklist::{ChecklistChange, ChecklistItemSnapshot, ChecklistSnapshot};
 use thinking::{render_hidden_thinking_activity, render_thinking};
 
+#[cfg(test)]
+use agent_activity::extract_agent_id;
 pub use plan::PlanUpdateCell;
 pub use thinking::extract_reasoning_summary;
 pub use tool_run::{
@@ -1276,7 +1279,7 @@ impl GenericToolCell {
         mode: RenderMode,
     ) -> Vec<Line<'static>> {
         if self.name == "activity_group" {
-            return self.render_activity_group(width);
+            return agent_activity::render_activity_group(self, width);
         }
 
         // Issue #241: when the underlying tool is a checklist/todo update and
@@ -1294,7 +1297,7 @@ impl GenericToolCell {
         // DelegateCard be the source of truth. Transcript mode keeps the
         // full block so session replay remains complete.
         if matches!(mode, RenderMode::Live) && self.name == "agent" {
-            return self.render_agent_compact(low_motion);
+            return agent_activity::render_agent_compact(self, low_motion);
         }
 
         // Live mode stays calm: successful tool calls collapse to one header
@@ -1412,41 +1415,6 @@ impl GenericToolCell {
         wrap_card_rail(lines)
     }
 
-    /// Render `agent` as a single compact summary line for live mode. The
-    /// companion `DelegateCard` already carries the
-    /// live action tree, status, and final summary; this line is just
-    /// the pointer that says "a spawn happened, here's the agent id".
-    ///
-    /// Output shape (header):
-    ///   `◐ delegate · agent  agent-abc12  [running]`
-    /// Falls back to a placeholder when the spawn is still pending and
-    /// no agent id has been assigned yet.
-    fn render_agent_compact(&self, low_motion: bool) -> Vec<Line<'static>> {
-        let family = crate::tui::widgets::tool_card::ToolFamily::Delegate;
-        let agent_id = self
-            .output
-            .as_deref()
-            .and_then(extract_agent_id)
-            .unwrap_or("…");
-        vec![render_tool_header_with_family_and_summary(
-            family,
-            Some(agent_id),
-            tool_status_label(self.status),
-            self.status,
-            None,
-            low_motion,
-        )]
-    }
-
-    fn render_activity_group(&self, width: u16) -> Vec<Line<'static>> {
-        let summary = self.input_summary.as_deref().unwrap_or("Updated metadata");
-        let budget = usize::from(width).max(1);
-        vec![Line::from(Span::styled(
-            truncate_text(summary, budget),
-            Style::default().fg(palette::TEXT_MUTED),
-        ))]
-    }
-
     /// If this cell is a checklist/todo write/add/update and the output is
     /// parseable as a checklist snapshot, render a purpose-built checklist
     /// card instead of the generic `name: ... { json }` block (issue #241).
@@ -1514,28 +1482,6 @@ fn render_spillover_annotation(path: &std::path::Path, width: u16) -> Line<'stat
         Span::styled(prefix, Style::default().fg(palette::TEXT_MUTED)),
         Span::styled(truncated, Style::default().fg(palette::TEXT_MUTED).italic()),
     ])
-}
-
-/// Pull the `agent_id` field out of a sub-agent open tool output. The
-/// tool emits structured JSON shaped like
-/// `{"agent_id": "agent-abc12", "nickname": "...", "model": "..."}` so we
-/// look for the `agent_id` key and return its string value.
-///
-/// Returns `None` for outputs we can't parse as JSON or that lack the
-/// expected key — the caller falls back to a placeholder so a still-pending
-/// spawn renders cleanly.
-fn extract_agent_id(output: &str) -> Option<&str> {
-    // Cheap, deterministic, no allocations: scan for the literal key.
-    // Avoids dragging serde_json into a render hot path on every frame.
-    let key = "\"agent_id\"";
-    let key_idx = output.find(key)?;
-    let rest = &output[key_idx + key.len()..];
-    let colon = rest.find(':')?;
-    let after_colon = rest[colon + 1..].trim_start();
-    let after_colon = after_colon.strip_prefix('"')?;
-    let end = after_colon.find('"')?;
-    let id = &after_colon[..end];
-    (!id.is_empty()).then_some(id)
 }
 
 /// Heuristic: does the output look like a unified diff? Returns true when
