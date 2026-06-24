@@ -79,7 +79,7 @@ export function stripGroupPrefix(text, { chatType, requirePrefix, prefix }) {
     chatType,
     requirePrefix,
     prefix: prefix || "/cw",
-    directChatTypes: ["private"]
+    directChatTypes: ["private", "channel"]
   });
 }
 

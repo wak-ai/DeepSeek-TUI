@@ -25,6 +25,7 @@ test("env and primitive parsers handle bridge env conventions", () => {
   assert.equal(parseBool("yes"), true);
   assert.equal(parseBool("0", true), false);
   assert.deepEqual(parseEnvText("export A='one'\nB=\"two\"\n# nope"), { A: "one", B: "two" });
+  assert.deepEqual(parseEnvText("A='\nB=\"\nEMPTY=\"\""), { A: "'", B: '"', EMPTY: "" });
 });
 
 test("parseTextContent supports plain text and JSON text/content wrappers", () => {
@@ -81,6 +82,10 @@ test("state/message/runtime helpers preserve bridge behavior", () => {
   assert.deepEqual(activeTurnBlock({ turns: [{ id: "t1", status: "queued" }] }), {
     turnId: "t1",
     message: "Thread already has active turn t1. Wait for it to finish or send /interrupt."
+  });
+  assert.deepEqual(activeTurnBlock({ turns: [{ status: "in_progress" }] }, null), {
+    turnId: "",
+    message: "Thread already has active turn (unknown). Wait for it to finish or send /interrupt."
   });
 });
 

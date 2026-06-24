@@ -164,8 +164,9 @@ export function parseEnvText(raw) {
     const key = normalized.slice(0, index).trim();
     let value = normalized.slice(index + 1).trim();
     if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
+      value.length >= 2 &&
+      ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'")))
     ) {
       value = value.slice(1, -1);
     }
@@ -321,10 +322,11 @@ export function latestRunningTurn(detail) {
 export function activeTurnBlock(detail, state = {}) {
   const runningTurn = latestRunningTurn(detail);
   if (!runningTurn) return null;
+  const activeTurnId = state?.activeTurnId || "";
   return {
-    turnId: runningTurn.id || state.activeTurnId || "",
+    turnId: runningTurn.id || activeTurnId,
     message: `Thread already has active turn ${
-      runningTurn.id || state.activeTurnId || "(unknown)"
+      runningTurn.id || activeTurnId || "(unknown)"
     }. Wait for it to finish or send /interrupt.`
   };
 }

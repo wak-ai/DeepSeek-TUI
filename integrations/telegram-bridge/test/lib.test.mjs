@@ -109,6 +109,17 @@ test("stripGroupPrefix accepts private chat text without group prefix", () => {
   );
 });
 
+test("stripGroupPrefix accepts Telegram channel text without group prefix", () => {
+  assert.deepEqual(
+    stripGroupPrefix("inspect this", {
+      chatType: "channel",
+      requirePrefix: true,
+      prefix: "/cw"
+    }),
+    { accepted: true, text: "inspect this" }
+  );
+});
+
 test("parseCommand handles Telegram bot mentions", () => {
   assert.deepEqual(parseCommand("hello"), { name: "prompt", args: "hello" });
   assert.deepEqual(parseCommand("/allow@CodeWhaleBot abc remember"), {
