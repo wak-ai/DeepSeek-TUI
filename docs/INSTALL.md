@@ -127,11 +127,11 @@ a download sourced from an impersonating repository or mirror.
 ## 3. Install via npm
 
 npm is the recommended install path. The `codewhale` wrapper is published at
-v0.8.64 (Node 18+; wrapper available for v0.8.56 and later).
+v0.8.65 (Node 18+; wrapper available for v0.8.56 and later).
 
 ```bash
 npm install -g codewhale
-codewhale --version   # 0.8.64
+codewhale --version   # 0.8.65
 ```
 
 `postinstall` downloads the right pair of binaries from the matching GitHub

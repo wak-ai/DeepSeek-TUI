@@ -33,7 +33,7 @@ open an issue — that's how the project grows.
 
 ```bash
 npm install -g codewhale
-codewhale --version   # 0.8.64
+codewhale --version   # 0.8.65
 ```
 
 The npm wrapper (Node 18+) downloads SHA-256-verified binaries from GitHub
