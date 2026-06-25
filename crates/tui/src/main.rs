@@ -371,6 +371,53 @@ enum ExecOutputFormat {
     StreamJson,
 }
 
+const CODEWHALE_TOOL_SURFACE_ENV: &str = "CODEWHALE_TOOL_SURFACE";
+const SHELL_ONLY_EXEC_TOOLS: &[&str] = &["exec_shell", "exec_shell_wait", "exec_shell_interact"];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ExecToolSurface {
+    ShellOnly,
+}
+
+fn exec_tool_surface_from_env() -> Option<ExecToolSurface> {
+    std::env::var(CODEWHALE_TOOL_SURFACE_ENV)
+        .ok()
+        .and_then(|value| parse_exec_tool_surface(&value))
+}
+
+fn parse_exec_tool_surface(value: &str) -> Option<ExecToolSurface> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "shell-only" | "shell_only" | "shell" => Some(ExecToolSurface::ShellOnly),
+        "full" | "native-tools" | "native_tools" | "" => None,
+        _ => None,
+    }
+}
+
+fn normalize_exec_tool_names(tools: &[String]) -> Vec<String> {
+    tools
+        .iter()
+        .map(|name| name.to_ascii_lowercase().trim().to_string())
+        .collect()
+}
+
+fn shell_only_exec_allowed_tools() -> Vec<String> {
+    SHELL_ONLY_EXEC_TOOLS
+        .iter()
+        .map(|name| (*name).to_string())
+        .collect()
+}
+
+fn resolve_exec_allowed_tools(
+    cli_allowed_tools: Option<&[String]>,
+    env_tool_surface: Option<ExecToolSurface>,
+) -> Option<Vec<String>> {
+    if let Some(tools) = cli_allowed_tools {
+        return Some(normalize_exec_tool_names(tools));
+    }
+
+    env_tool_surface.map(|ExecToolSurface::ShellOnly| shell_only_exec_allowed_tools())
+}
+
 #[derive(Args, Debug, Clone)]
 struct FleetArgs {
     #[command(subcommand)]
@@ -1143,6 +1190,7 @@ async fn main() -> Result<()> {
                 // the DEEPSEEK_YOLO env var (which the config loader folds into
                 // `config.yolo`), not as a CLI flag. Honour either source.
                 let yolo = cli.yolo || config.yolo.unwrap_or(false);
+                let env_tool_surface = exec_tool_surface_from_env();
                 let needs_engine = args.auto
                     || yolo
                     || resume_session_id.is_some()
@@ -1150,7 +1198,8 @@ async fn main() -> Result<()> {
                     || args.max_turns.is_some()
                     || args.allowed_tools.is_some()
                     || args.disallowed_tools.is_some()
-                    || args.append_system_prompt.is_some();
+                    || args.append_system_prompt.is_some()
+                    || env_tool_surface.is_some();
                 if needs_engine {
                     let provider = config.api_provider();
                     let max_subagents = cli.max_subagents.map_or_else(
@@ -1159,16 +1208,12 @@ async fn main() -> Result<()> {
                     );
                     let auto_mode = args.auto || yolo;
                     let max_turns = args.max_turns.unwrap_or(100);
-                    let allowed_tools = args.allowed_tools.as_ref().map(|v| {
-                        v.iter()
-                            .map(|s| s.to_ascii_lowercase().trim().to_string())
-                            .collect::<Vec<_>>()
-                    });
-                    let disallowed_tools = args.disallowed_tools.as_ref().map(|v| {
-                        v.iter()
-                            .map(|s| s.to_ascii_lowercase().trim().to_string())
-                            .collect::<Vec<_>>()
-                    });
+                    let allowed_tools =
+                        resolve_exec_allowed_tools(args.allowed_tools.as_deref(), env_tool_surface);
+                    let disallowed_tools = args
+                        .disallowed_tools
+                        .as_deref()
+                        .map(normalize_exec_tool_names);
                     run_exec_agent(
                         &config,
                         &model,
@@ -7637,6 +7682,53 @@ mod terminal_mode_tests {
         assert_eq!(args.max_turns, Some(7));
         assert_eq!(args.append_system_prompt.as_deref(), Some("extra rules"));
         assert_eq!(args.prompt, vec!["do the thing"]);
+    }
+
+    #[test]
+    fn exec_shell_only_tool_surface_env_sets_shell_allowlist() {
+        let _env_lock = crate::test_support::lock_test_env();
+        let _surface =
+            crate::test_support::EnvVarGuard::set(CODEWHALE_TOOL_SURFACE_ENV, " shell-only ");
+
+        let allowed_tools = resolve_exec_allowed_tools(None, exec_tool_surface_from_env())
+            .expect("shell-only surface should set an allowlist");
+
+        assert_eq!(
+            allowed_tools,
+            vec![
+                "exec_shell".to_string(),
+                "exec_shell_wait".to_string(),
+                "exec_shell_interact".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn exec_explicit_allowed_tools_override_shell_only_env() {
+        let _env_lock = crate::test_support::lock_test_env();
+        let _surface =
+            crate::test_support::EnvVarGuard::set(CODEWHALE_TOOL_SURFACE_ENV, "shell-only");
+        let explicit = vec![" Read_File ".to_string(), "GREP_FILES".to_string()];
+
+        let allowed_tools =
+            resolve_exec_allowed_tools(Some(&explicit), exec_tool_surface_from_env())
+                .expect("explicit allowlist should be preserved");
+
+        assert_eq!(
+            allowed_tools,
+            vec!["read_file".to_string(), "grep_files".to_string()]
+        );
+    }
+
+    #[test]
+    fn exec_full_tool_surface_env_leaves_allowlist_unset() {
+        let _env_lock = crate::test_support::lock_test_env();
+        let _surface = crate::test_support::EnvVarGuard::set(CODEWHALE_TOOL_SURFACE_ENV, "full");
+
+        assert_eq!(
+            resolve_exec_allowed_tools(None, exec_tool_surface_from_env()),
+            None
+        );
     }
 
     #[test]

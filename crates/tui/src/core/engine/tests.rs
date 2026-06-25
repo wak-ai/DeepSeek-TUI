@@ -215,6 +215,33 @@ fn tool_catalog_filter_applies_allow_and_deny_gates() {
 }
 
 #[test]
+fn tool_catalog_shell_only_benchmark_surface_hides_native_tools() {
+    let mut catalog = vec![
+        catalog_tool("exec_shell"),
+        catalog_tool("exec_shell_wait"),
+        catalog_tool("exec_shell_interact"),
+        catalog_tool("read_file"),
+        catalog_tool("write_file"),
+        catalog_tool("list_dir"),
+        catalog_tool("git_status"),
+        catalog_tool("checklist_write"),
+    ];
+    let shell_only = [
+        "exec_shell".to_string(),
+        "exec_shell_wait".to_string(),
+        "exec_shell_interact".to_string(),
+    ];
+
+    filter_tool_catalog_for_gates(&mut catalog, Some(&shell_only), None);
+
+    let names: Vec<&str> = catalog.iter().map(|t| t.name.as_str()).collect();
+    assert_eq!(
+        names,
+        ["exec_shell", "exec_shell_wait", "exec_shell_interact"]
+    );
+}
+
+#[test]
 fn tool_catalog_filter_is_inert_without_gates() {
     let mut catalog = vec![catalog_tool("read_file"), catalog_tool("exec_shell")];
     filter_tool_catalog_for_gates(&mut catalog, None, None);
