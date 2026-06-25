@@ -2182,6 +2182,14 @@ mod tests {
             joined.contains("Enter selected option"),
             "destructive hint missing:\n{joined}"
         );
+        assert!(
+            joined.contains("YOLO skips ordinary approvals"),
+            "missing YOLO/review-rule semantics:\n{joined}"
+        );
+        assert!(
+            joined.contains("Deny rejects only this tool call"),
+            "missing deny-vs-abort semantics:\n{joined}"
+        );
         assert!(joined.contains("write_file"));
     }
 

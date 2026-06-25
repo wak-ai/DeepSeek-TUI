@@ -1291,6 +1291,9 @@ impl Renderable for ApprovalWidget<'_> {
                 Span::styled(impact, Style::default().fg(palette::TEXT_BODY)),
             ]));
         }
+        if matches!(risk, RiskLevel::Destructive) {
+            push_destructive_approval_semantics(&mut lines, locale, compact_vertical);
+        }
 
         // Intent summary — the model's explanation of why this change is needed (#2381).
         if let Some(ref summary) = self.request.intent_summary {
@@ -1679,7 +1682,6 @@ fn push_compact_approval_controls(
     locale: Locale,
     can_save_rule: bool,
 ) {
-    lines.push(Line::from(""));
     let (once, always, deny, abort, save) = match locale {
         Locale::ZhHans => ("仅本次", "始终", "拒绝", "中止", "保存"),
         _ => ("once", "always", "deny", "abort", "save"),
@@ -1704,6 +1706,65 @@ fn push_compact_approval_controls(
             Span::styled("[s] ", Style::default().fg(shortcut).bold()),
             Span::styled(save.to_string(), Style::default().fg(palette::TEXT_HINT)),
         ]));
+    }
+}
+
+fn push_destructive_approval_semantics(
+    lines: &mut Vec<Line<'static>>,
+    locale: Locale,
+    compact: bool,
+) {
+    if compact {
+        let (label, value) = destructive_approval_compact_semantics(locale);
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(label, Style::default().fg(palette::TEXT_HINT)),
+            Span::styled(value, Style::default().fg(palette::TEXT_SECONDARY)),
+        ]));
+        return;
+    }
+
+    for (label, value) in destructive_approval_semantics(locale) {
+        lines.push(Line::from(vec![
+            Span::raw("  "),
+            Span::styled(label, Style::default().fg(palette::TEXT_HINT)),
+            Span::styled(value, Style::default().fg(palette::TEXT_SECONDARY)),
+        ]));
+    }
+}
+
+fn destructive_approval_compact_semantics(locale: Locale) -> (&'static str, &'static str) {
+    match locale {
+        Locale::ZhHans => (
+            "规则: ",
+            "YOLO 提示=审查/询问规则；拒绝跳过本次，Esc 中止整轮。",
+        ),
+        _ => (
+            "Policy: ",
+            "YOLO prompt = review rule or ask-rule; d denies this call, Esc aborts turn.",
+        ),
+    }
+}
+
+fn destructive_approval_semantics(locale: Locale) -> [(&'static str, &'static str); 2] {
+    match locale {
+        Locale::ZhHans => [
+            (
+                "规则: ",
+                "YOLO 会跳过普通批准；仍出现此提示表示命中审查规则或显式询问规则。",
+            ),
+            ("取消: ", "拒绝只跳过本次工具调用；Esc 会中止整轮。"),
+        ],
+        _ => [
+            (
+                "Policy: ",
+                "YOLO skips ordinary approvals; this prompt means a review rule or explicit ask-rule is active.",
+            ),
+            (
+                "Cancel: ",
+                "Deny rejects only this tool call; Esc aborts the whole turn.",
+            ),
+        ],
     }
 }
 
@@ -4802,6 +4863,9 @@ mod tests {
         assert!(rendered.contains("Review the Bash command"), "{rendered}");
         assert!(rendered.contains("Command:"), "{rendered}");
         assert!(rendered.contains("cargo clippy"), "{rendered}");
+        assert!(rendered.contains("YOLO prompt = review rule"), "{rendered}");
+        assert!(rendered.contains("d denies this call"), "{rendered}");
+        assert!(rendered.contains("aborts turn"), "{rendered}");
         assert!(rendered.contains("[y]"), "{rendered}");
         assert!(rendered.contains("[a]"), "{rendered}");
         assert!(rendered.contains("[d]"), "{rendered}");
