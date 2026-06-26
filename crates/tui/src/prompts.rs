@@ -1119,17 +1119,20 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
         );
     }
 
-    // 2.3b. Vision / image analysis guidance — tells the model to
-    // use `image_analyze` for image files instead of `read_file` or `image_ocr`.
+    // 2.3b. Vision / image analysis guidance.
+    // Pasted image attachments are pre-analyzed before this turn starts and
+    // arrive as inline [Image #N — vision analysis] blocks — use them directly.
+    // The `image_analyze` tool handles path-based requests the user types explicitly.
     if session_context.vision_enabled {
         full_prompt.push_str(
             "\n\n## Vision / Image Analysis\n\n\
-             You have the `image_analyze` tool available for analyzing images. \
-             When the user references an image file (PNG, JPEG, GIF, WebP, or BMP), \
-             ALWAYS use `image_analyze` with the file path — do NOT use `read_file` or \
-             `image_ocr` for image files. The `image_analyze` tool uses an AI vision \
-             model and gives far better results than OCR; prefer it in all cases. \
-             It accepts both absolute and relative paths.\n\n\
+             Images pasted into the conversation are automatically analyzed by an AI \
+             vision model before they reach you. You will see inline \
+             `[Image #N — vision analysis]` blocks containing detailed descriptions — \
+             use these directly when the user asks about an image.\n\n\
+             If the user references an image file by path (e.g. \"analyze screenshot.png\") \
+             that has NOT been pre-analyzed, use the `image_analyze` tool with the file \
+             path. Do NOT use `read_file` or `image_ocr` for image files.\n\n\
              IMPORTANT: When discussing image analysis results, always respond in English. \
              The vision model returns English descriptions — present them in English and \
              write all your commentary, explanations, and follow-up questions in English."

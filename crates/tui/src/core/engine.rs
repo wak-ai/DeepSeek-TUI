@@ -2300,6 +2300,18 @@ impl Engine {
             self.session.approval_mode = agent_approval_mode;
         }
 
+        // Pre-analyze image attachments so DeepSeek sees inline AI vision
+        // descriptions from turn start rather than calling image_analyze mid-turn.
+        let content = {
+            let vision_config = self.config.vision_config.clone();
+            let workspace = self.session.workspace.clone();
+            if let Some(vc) = vision_config {
+                pre_analyze_image_attachments(content, &vc, &workspace).await
+            } else {
+                content
+            }
+        };
+
         // Add user message to session
         let user_msg = self.user_text_message_with_turn_metadata_for_route_and_provenance(
             content,
@@ -3839,6 +3851,58 @@ fn filter_tool_catalog_for_gates(
         !turn_loop::command_denies_tool(disallowed_tools, &tool.name)
             && turn_loop::command_allows_tool(allowed_tools, &tool.name)
     });
+}
+
+/// Replace `[Attached image: ...]` markers in `content` with inline AI vision
+/// descriptions so DeepSeek sees full image context from the start of the turn
+/// without needing to call `image_analyze`. Processes attachments in reverse
+/// byte order to keep offsets stable across multi-image messages.
+/// Failures are soft: a failed image keeps an error note so the turn continues.
+async fn pre_analyze_image_attachments(
+    mut content: String,
+    vision_config: &crate::config::VisionModelConfig,
+    workspace: &Path,
+) -> String {
+    use crate::tui::file_mention::media_attachment_references;
+    use crate::vision::tools::analyze_image;
+
+    let attachments = media_attachment_references(&content);
+    let image_attachments: Vec<_> = attachments
+        .into_iter()
+        .filter(|a| a.kind == "image")
+        .collect();
+
+    if image_attachments.is_empty() {
+        return content;
+    }
+
+    // Assign stable forward-order numbers, then iterate in reverse byte order.
+    let numbered: Vec<_> = image_attachments
+        .into_iter()
+        .enumerate()
+        .map(|(i, a)| (i + 1, a))
+        .collect();
+
+    for (n, attachment) in numbered.into_iter().rev() {
+        let path = Path::new(&attachment.path);
+        let resolved = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            workspace.join(path)
+        };
+
+        let replacement = match analyze_image(vision_config, &resolved, None).await {
+            Ok(description) => format!("[Image #{n} — vision analysis]\n{description}\n"),
+            Err(e) => format!(
+                "[Image #{n} — vision analysis failed: {e}]\n{}\n",
+                attachment.path
+            ),
+        };
+
+        content.replace_range(attachment.start_byte..attachment.end_byte, &replacement);
+    }
+
+    content
 }
 
 use self::approval::{ApprovalDecision, ApprovalResult, UserInputDecision};
