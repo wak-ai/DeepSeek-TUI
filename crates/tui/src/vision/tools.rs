@@ -282,6 +282,93 @@ impl ToolSpec for ImageAnalyzeTool {
     }
 }
 
+/// Analyze an image file and return the description text.
+///
+/// Reuses `ImageAnalyzeTool` infrastructure. Called by the engine to
+/// pre-analyze image attachments before the user message reaches DeepSeek,
+/// so descriptions are embedded inline rather than requiring a tool call.
+pub(crate) async fn analyze_image(
+    config: &VisionModelConfig,
+    path: &std::path::Path,
+    prompt: Option<&str>,
+) -> Result<String, String> {
+    let prompt = prompt.unwrap_or(
+        "Describe this image in detail. Include layout, text content, annotations \
+         (arrows, highlights, labels), colors, and any visible UI elements or error \
+         messages. Respond in English.",
+    );
+
+    let tool = ImageAnalyzeTool::new(config.clone());
+    let (image_data, mime_type) = ImageAnalyzeTool::read_image_file(path)
+        .await
+        .map_err(|e| e.to_string())?;
+    let payload = tool.request_payload(prompt, &image_data, &mime_type);
+    let url = format!("{}/chat/completions", tool.base_url());
+    let api_key = tool.api_key();
+
+    let retry_config = RetryConfig {
+        max_retries: 3,
+        initial_delay: 1.0,
+        max_delay: 30.0,
+        enabled: true,
+        ..Default::default()
+    };
+
+    let response = with_retry(
+        &retry_config,
+        || {
+            let client = tool.client.clone();
+            let url = url.clone();
+            let api_key = api_key.clone();
+            let payload = payload.clone();
+            async move {
+                let response = client
+                    .post(&url)
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {api_key}"))
+                    .header("X-Title", "deepseek-tui-wk")
+                    .header("HTTP-Referer", "https://github.com/wak-ai/DeepSeek-TUI")
+                    .json(&payload)
+                    .send()
+                    .await
+                    .map_err(|e| LlmError::from_reqwest(&e))?;
+
+                let status = response.status();
+                if !status.is_success() {
+                    let error_text = response
+                        .text()
+                        .await
+                        .unwrap_or_else(|_| "Unknown error".to_string());
+                    let error_text = sanitize_http_error_body(
+                        Some("Vision provider"),
+                        status.as_u16(),
+                        &error_text,
+                    );
+                    return Err(LlmError::from_http_response(status.as_u16(), &error_text));
+                }
+                Ok(response)
+            }
+        },
+        None,
+    )
+    .await
+    .map_err(|e| format!("Vision API request failed: {e}"))?;
+
+    let json: Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse vision response: {e}"))?;
+
+    Ok(json
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("")
+        .to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
