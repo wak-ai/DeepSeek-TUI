@@ -1120,15 +1120,16 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
     }
 
     // 2.3b. Vision / image analysis guidance — tells the model to
-    // use `image_analyze` for image files instead of `read_file`.
+    // use `image_analyze` for image files instead of `read_file` or `image_ocr`.
     if session_context.vision_enabled {
         full_prompt.push_str(
             "\n\n## Vision / Image Analysis\n\n\
              You have the `image_analyze` tool available for analyzing images. \
              When the user references an image file (PNG, JPEG, GIF, WebP, or BMP), \
-             use `image_analyze` with the file path — do NOT use `read_file` for \
-             binary image files. The `image_analyze` tool accepts both absolute and \
-             relative paths.\n\n\
+             ALWAYS use `image_analyze` with the file path — do NOT use `read_file` or \
+             `image_ocr` for image files. The `image_analyze` tool uses an AI vision \
+             model and gives far better results than OCR; prefer it in all cases. \
+             It accepts both absolute and relative paths.\n\n\
              IMPORTANT: When discussing image analysis results, always respond in English. \
              The vision model returns English descriptions — present them in English and \
              write all your commentary, explanations, and follow-up questions in English."
