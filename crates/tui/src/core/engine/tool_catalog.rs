@@ -699,17 +699,23 @@ pub(super) fn maybe_hydrate_requested_deferred_tool(
 
     hydrated_tools_this_batch.insert(tool_name.to_string());
 
-    // Check whether the model's input already satisfies the schema's
-    // required fields. If so, activate the tool and return `None` to let
-    // the normal execution path handle it — avoiding a wasted round-trip.
+    // Check whether the model's input already satisfies the schema. If so,
+    // activate the tool and return `None` to let the normal execution path
+    // handle it — avoiding a wasted round-trip.
     // When the model used wrong field names that we can correct
     // (old_string→search, new_string→replace, etc.) those corrections
-    // were already applied to tool_input by the caller, so the required-
-    // field check sees the corrected names.
+    // were already applied to tool_input by the caller, so the check sees
+    // the corrected names.
+    // The input is valid when ALL required fields are present AND there are
+    // no unexpected fields. The second condition is needed for tools with no
+    // required fields (e.g. rlm_open) where vacuous truth would otherwise
+    // allow inputs with completely wrong field names to bypass the preflight.
+    let expected = schema_fields(&def.input_schema);
     let required = schema_required_fields(&def.input_schema);
     let received = received_field_names(tool_input);
     let all_required_present = required.iter().all(|field| received.contains(field));
-    if all_required_present {
+    let no_unexpected = received.iter().all(|field| expected.iter().any(|e| &e.name == field));
+    if all_required_present && no_unexpected {
         return None;
     }
 
