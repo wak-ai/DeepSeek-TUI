@@ -26,6 +26,9 @@ import {
 } from "./lib.mjs";
 import { ThreadStore as CoreThreadStore } from "../../bridge-core/src/lib.mjs";
 
+const TYPING_INTERVAL_MS = 2000;
+const TYPING_TIMEOUT_MS = 1500;
+
 class ThreadStore extends CoreThreadStore {
   constructor(filePath) {
     super(filePath, { messageLimit: 500, actions: true });
@@ -523,8 +526,27 @@ async function streamTurnEvents(chatId, threadId, turnId, sinceSeq, options = {}
   let responseText = "";
   let latestSeq = sinceSeq;
   let sentProgressAt = Date.now();
+  let typingPaused = false;
+  let typingInFlight = false;
+
+  const tickTyping = async () => {
+    if (stopping || typingPaused || typingInFlight) return;
+    typingInFlight = true;
+    try {
+      await sendTypingAction(chatId);
+    } catch (error) {
+      console.warn("failed to send Telegram typing action", error);
+    } finally {
+      typingInFlight = false;
+    }
+  };
+  const typingTimer = setInterval(() => {
+    void tickTyping();
+  }, TYPING_INTERVAL_MS);
+  typingTimer.unref?.();
 
   try {
+    void tickTyping();
     const response = await fetch(
       `${config.runtimeUrl}/v1/threads/${encodeURIComponent(threadId)}/events?since_seq=${sinceSeq}`,
       {
@@ -544,6 +566,17 @@ async function streamTurnEvents(chatId, threadId, turnId, sinceSeq, options = {}
       await threadStore.patchChat(chatId, { lastSeq: latestSeq });
 
       if (turnId && record.turn_id && record.turn_id !== turnId) continue;
+      const lifecycleStatus =
+        record.event === "turn.lifecycle"
+          ? record.payload?.turn?.status || record.payload?.status
+          : null;
+      const stopTypingEvent =
+        record.event === "turn.completed" ||
+        ["failed", "canceled", "interrupted"].includes(lifecycleStatus);
+      if (typingPaused && record.event !== "approval.required" && !stopTypingEvent) {
+        typingPaused = false;
+        void tickTyping();
+      }
 
       if (record.event === "item.delta" && record.payload?.kind === "agent_message") {
         responseText += record.payload.delta || "";
@@ -556,6 +589,7 @@ async function streamTurnEvents(chatId, threadId, turnId, sinceSeq, options = {}
       }
 
       if (record.event === "approval.required") {
+        typingPaused = true;
         const approval = record.payload || {};
         const approvalId = approval.approval_id || approval.id;
         if (!approvalId) {
@@ -596,6 +630,7 @@ async function streamTurnEvents(chatId, threadId, turnId, sinceSeq, options = {}
       }
 
       if (record.event === "turn.completed") {
+        typingPaused = true;
         const turn = record.payload?.turn || {};
         const status = turn.status || "completed";
         const error = turn.error ? `\n${turn.error}` : "";
@@ -612,9 +647,9 @@ async function streamTurnEvents(chatId, threadId, turnId, sinceSeq, options = {}
       }
 
       if (record.event === "turn.lifecycle") {
-        const status = record.payload?.turn?.status || record.payload?.status;
-        if (["failed", "canceled", "interrupted"].includes(status)) {
-          await sendTurnText(chatId, `Turn ${status}.`, { replyMarkup: controlKeyboard() });
+        if (["failed", "canceled", "interrupted"].includes(lifecycleStatus)) {
+          typingPaused = true;
+          await sendTurnText(chatId, `Turn ${lifecycleStatus}.`, { replyMarkup: controlKeyboard() });
           return;
         }
       }
@@ -630,6 +665,7 @@ async function streamTurnEvents(chatId, threadId, turnId, sinceSeq, options = {}
     }
     throw error;
   } finally {
+    clearInterval(typingTimer);
     clearTimeout(timeout);
     options.signal?.removeEventListener("abort", abortFromCaller);
   }
@@ -790,6 +826,23 @@ async function sendText(chatId, text, options = {}) {
   }
 }
 
+async function sendTypingAction(chatId) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TYPING_TIMEOUT_MS);
+  try {
+    await telegramApi(
+      "sendChatAction",
+      {
+        chat_id: chatId,
+        action: "typing"
+      },
+      { signal: controller.signal }
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function sendTurnText(chatId, text, options = {}) {
   try {
     await sendText(chatId, text, options);
@@ -814,10 +867,10 @@ async function editMessageReplyMarkup(chatId, messageId, replyMarkup) {
   });
 }
 
-async function telegramApi(method, body = {}) {
+async function telegramApi(method, body = {}, options = {}) {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      return await telegramApiOnce(method, body);
+      return await telegramApiOnce(method, body, options);
     } catch (error) {
       const retryMs = method === "sendMessage" ? telegramSendRetryDelayMs(error, attempt) : null;
       if (retryMs == null) throw error;
@@ -829,11 +882,12 @@ async function telegramApi(method, body = {}) {
   }
 }
 
-async function telegramApiOnce(method, body = {}) {
+async function telegramApiOnce(method, body = {}, options = {}) {
   const response = await fetch(`${config.apiBase}/bot${config.botToken}/${method}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(body)
+    body: JSON.stringify(body),
+    signal: options.signal
   });
   const payload = await readJsonSafe(response);
   if (!response.ok || payload?.ok === false) {

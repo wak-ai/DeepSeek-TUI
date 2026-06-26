@@ -84,3 +84,25 @@ test("turn update sends retry without ending the stream", async () => {
   assert.match(sendTurnText, /catch \(error\) {\s*console\.error\("failed to send Telegram turn update"/);
   assert.match(telegramApi, /method === "sendMessage" \? telegramSendRetryDelayMs\(error, attempt\) : null/);
 });
+
+test("turn streams keep Telegram typing visible and pause while waiting for approval", async () => {
+  const source = await readBridgeSource();
+  const streamTurnEvents = extractFunction(source, "streamTurnEvents");
+  const sendTypingAction = extractFunction(source, "sendTypingAction");
+  const telegramApiOnce = extractFunction(source, "telegramApiOnce");
+
+  assert.match(source, /const TYPING_INTERVAL_MS = 2000;/);
+  assert.match(source, /const TYPING_TIMEOUT_MS = 1500;/);
+  assert.match(streamTurnEvents, /let typingPaused = false;/);
+  assert.match(streamTurnEvents, /let typingInFlight = false;/);
+  assert.match(streamTurnEvents, /const typingTimer = setInterval\(\(\) => {\s*void tickTyping\(\);/);
+  assert.match(streamTurnEvents, /void tickTyping\(\);/);
+  assert.match(streamTurnEvents, /const stopTypingEvent =/);
+  assert.match(streamTurnEvents, /if \(typingPaused && record\.event !== "approval\.required" && !stopTypingEvent\)/);
+  assert.match(streamTurnEvents, /typingPaused = true;/);
+  assert.match(streamTurnEvents, /clearInterval\(typingTimer\);/);
+  assert.match(sendTypingAction, /telegramApi\(\s*"sendChatAction"/);
+  assert.match(sendTypingAction, /action: "typing"/);
+  assert.match(sendTypingAction, /setTimeout\(\(\) => controller\.abort\(\), TYPING_TIMEOUT_MS\)/);
+  assert.match(telegramApiOnce, /signal: options\.signal/);
+});
