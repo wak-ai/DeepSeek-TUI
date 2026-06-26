@@ -3334,6 +3334,7 @@ mod tests {
                 show_thinking: true,
                 verbosity: Some(" Concise "),
                 skills_scan_codewhale_only: false,
+                vision_enabled: false,
             },
         ) {
             SystemPrompt::Text(text) => text,
